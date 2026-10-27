@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "example",
+      "name": "Example source (template)",
+      "enabled": false,
+      "homepage": "https://example.invalid/",
+      "request": {
+        "url": "https://example.invalid/api/posts?limit={limit}&page={page}",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "itemsPath": "data",
+        "imageUrl": "file_url",
+        "thumbnailUrl": "sample_url",
+        "pageUrl": "post_url",
+        "tags": "tags"
+      },
+      "filter": {
+        "sfwOnly": true
+      }
+    }
+  ]
+}

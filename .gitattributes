@@ -1,0 +1,18 @@
+# 统一行尾：仓库里一律 LF，检出时不依赖每个人的 core.autocrlf 设置。
+# 没有这条时，Windows 上 autocrlf=true 会把文件转成 CRLF，
+# 导致"只改了一行却整个文件都变了"的假 diff。
+* text=auto eol=lf
+
+# Windows 专属脚本保留 CRLF，解释器/CMD 更稳。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制：不做换行转换，也不当成文本做 diff。
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.gif  binary
+*.ico  binary
+*.icns binary
