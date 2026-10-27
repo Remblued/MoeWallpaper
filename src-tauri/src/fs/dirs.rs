@@ -3,7 +3,7 @@ use std::path::Path;
 
 /// 创建目录（含父目录）。已存在时视为成功——幂等。
 pub fn ensure_dir(path: &Path) -> Result<(), String> {
-    fs::create_dir_all(path).map_err(|e| format!("创建目录失败 {:?} : {}", path, e))
+    fs::create_dir_all(path).map_err(|e| format!("创建目录失败 {:?}: {}", path, e))
 }
 
 pub fn ensure_base_layout() -> Result<(), String> {
