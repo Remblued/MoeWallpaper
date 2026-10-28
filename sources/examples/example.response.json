@@ -1,0 +1,19 @@
+{
+  "data": [
+    {
+      "file_url": "https://example.invalid/img/001.jpg",
+      "sample_url": "https://example.invalid/img/001_thumb.jpg",
+      "post_url": "https://example.invalid/post/001",
+      "tags": ["cat", "maid"]
+    },
+    {
+      "file_url": "https://example.invalid/img/002.jpg",
+      "sample_url": "https://example.invalid/img/002_thumb.jpg",
+      "post_url": "https://example.invalid/post/002",
+      "tags": ["ribbon"]
+    },
+    {
+      "file_url": "https://example.invalid/img/003.jpg"
+    }
+  ]
+}
