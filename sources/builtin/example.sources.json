@@ -3,7 +3,7 @@
   "sources": [
     {
       "id": "example",
-      "name": "Example source (template)",
+      "name": "示例图源",
       "enabled": false,
       "homepage": "https://example.invalid/",
       "request": {

@@ -1,22 +1,37 @@
 import { invoke } from "@tauri-apps/api/core";
 
-let greetInputEl: HTMLInputElement | null;
-let greetMsgEl: HTMLElement | null;
+/** 和后端 WallpaperSource 的序列化结果对应（camelCase）。 */
+interface WallpaperSource {
+  id: string;
+  name: string;
+  enabled?: boolean;
+  homepage?: string | null;
+}
 
-async function greet() {
-  if (greetMsgEl && greetInputEl) {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsgEl.textContent = await invoke("greet", {
-      name: greetInputEl.value,
-    });
+const statusEl = document.getElementById("status");
+const listEl = document.getElementById("sources");
+
+function render(sources: WallpaperSource[]) {
+  if (!listEl) return;
+
+  listEl.innerHTML = sources
+    .map((s) => `<li><strong>${s.name}</strong> <code>${s.id}</code></li>`)
+    .join("");
+}
+
+async function load() {
+  try {
+    const sources = await invoke<WallpaperSource[]>("list_sources");
+    render(sources);
+
+    if (statusEl) {
+      statusEl.textContent = `已载入 ${sources.length} 个图源`;
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = `载入失败：${String(err)}`;
+    }
   }
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  greetInputEl = document.querySelector("#greet-input");
-  greetMsgEl = document.querySelector("#greet-msg");
-  document.querySelector("#greet-form")?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    greet();
-  });
-});
+window.addEventListener("DOMContentLoaded", load);

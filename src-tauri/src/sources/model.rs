@@ -6,10 +6,10 @@
 
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// HTTP 请求描述。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpRequestSpec {
     /// 请求地址。`{limit}` 和 `{page}` 是占位符，由代码替换，JSON 本身不做替换。
@@ -20,7 +20,7 @@ pub struct HttpRequestSpec {
 }
 
 /// 响应映射：告诉代码"列表在哪、每张图的字段叫什么"。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseMapping {
     /// 图片数组在响应 JSON 里的位置；省略表示响应本身就是数组。
@@ -37,7 +37,7 @@ pub struct ResponseMapping {
 /// 默认值是 `sfwOnly: true`，而且是**故意的**：
 /// 配置里没写这个字段时，必须按最保守的规则处理。
 /// 想改成"默认不过滤"，等于改产品底线，不是改代码风格。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SourceFilter {
     pub sfw_only: bool,
@@ -50,7 +50,7 @@ impl Default for SourceFilter {
 }
 
 /// 单个图源。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WallpaperSource {
     /// 稳定标识，用于缓存目录名；发布后不要改。
@@ -66,7 +66,7 @@ pub struct WallpaperSource {
 }
 
 /// `sources/builtin/*.json` 的顶层结构。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourcesFile {
     pub schema_version: u32,
