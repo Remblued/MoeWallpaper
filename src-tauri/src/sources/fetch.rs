@@ -38,43 +38,49 @@ pub fn substitute_placeholders(url: &str, page: u32, limit: u32) -> String {
         .replace("{limit}", &limit.to_string())
 }
 
-// ============================================================================
-//  下面这个函数由你实现（A1 的核心）
-// ============================================================================
-
 /// 从指定图源拉一页图片。
-///
 /// # 实现步骤
-///
-/// 1. 拼地址：`substitute_placeholders(&source.request.url, page, DEFAULT_LIMIT)`
-/// 2. 建请求：`client().get(&url)`
-/// 3. 加请求头：配置里的 `source.request.headers` 是 `HashMap<String, String>`，
-///    遍历它，每个用 `.header(键, 值)`
-/// 4. 发出去：`.send().await` → 得到 `Result<Response, reqwest::Error>`
-/// 5. 查状态码：`.status()` 不是 2xx 就返回 Err，
-///    错误信息里**必须带状态码**，否则用户只知道"失败了"没法排查
-/// 6. 读 JSON：`.json::<serde_json::Value>().await`
-/// 7. 交给现成的提取函数：`crate::sources::extract::extract_images(&source.response, &value)`
-///
-/// # 错误处理约定
-///
-/// - 网络层失败、状态码非 2xx、JSON 解析失败 → `Err(String)`
-/// - 服务器返回空列表 → `Ok(vec![])`，不是错误
-/// - 每处 `.map_err(|e| ...)` 的错误信息里带上 URL，排查时才知道是哪个图源坏了
-///
-/// 提示：`?` 只能用在 `Result<_, E>` 上，而 `reqwest::Error` 不是 `String`，
-/// 所以不能直接 `?`，要么 `.map_err(...)?`，要么 `match`。
 pub async fn fetch_source_images(
     source: &WallpaperSource,
     page: u32,
 ) -> Result<Vec<ImageRef>, String> {
+    // 1. 拼地址 放行GET
     let url = substitute_placeholders(&source.request.url, page, DEFAULT_LIMIT);
 
-    // TODO(你写)：把上面 7 步实现出来。
-    // 下面两行只是临时占位，保证脚手架能编译通过；你写完后把它们和 todo! 一起删掉。
-    let _ = url;
-    let _ = client();
-    todo!("fetch_source_images 由你实现")
+    // 2. 只放行 GET；没配 method 视为默认 GET
+    if let Some(m) = &source.request.method
+        && !m.eq_ignore_ascii_case("GET")
+    {
+        return Err(format!("图源 {} 暂不支持 {} 方法", url, m));
+    }
+
+    //2+3.建立请求 + 请求头
+    let mut req = client().get(&url);
+    for (k, v) in &source.request.headers {
+        req = req.header(k, v);
+    }
+
+    //4.发出去
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("请求 {} 失败: {}", url, e))?;
+
+    // 5. 查状态码
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("请求 {} 返回状态码 {}", url, status));
+    }
+
+    // 6. 读 JSON
+    let value = resp
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("解析 {} 的 JSON 失败: {}", url, e))?;
+
+    // 7. 交给现成提取函数
+    crate::sources::extract::extract_images(&source.response, &value)
+        .map_err(|e| format!("从 {} 提取图片失败: {}", url, e))
 }
 
 #[cfg(test)]
@@ -97,5 +103,33 @@ mod tests {
     fn substitutes_repeated_placeholder() {
         let url = substitute_placeholders("https://a.com/{page}/{page}", 7, 20);
         assert_eq!(url, "https://a.com/7/7");
+    }
+
+    /// A1 的验收标准。
+    ///
+    /// `example.invalid` 这个域名永远不会解析成功（`.invalid` 是 RFC 2606
+    /// 保留给"保证不存在"的域名），所以这条测试**不依赖真实网络**，也不会被墙。
+    ///
+    /// 它现在应该是**红的**——因为 `fetch_source_images` 还是 `todo!()`。
+    /// 你的任务就是让它变绿。
+    #[tokio::test]
+    async fn example_source_fails_with_readable_error() {
+        let source = crate::sources::loader::load_builtin()
+            .unwrap()
+            .sources
+            .into_iter()
+            .find(|s| s.id == "example")
+            .unwrap();
+
+        let result = fetch_source_images(&source, 1).await;
+
+        assert!(result.is_err(), "example.invalid 不可能成功，必须返回 Err");
+
+        // 错误信息必须带上地址，否则用户只知道"失败了"，没法排查是哪个图源坏的
+        let message = result.unwrap_err();
+        assert!(
+            message.contains("example.invalid"),
+            "错误信息里必须包含请求地址，实际是：{message:?}"
+        );
     }
 }
