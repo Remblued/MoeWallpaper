@@ -10,9 +10,22 @@
 
   <body>
     <main class="container">
-      <h1>MoeWallpaper</h1>
-      <p id="status">载入中…</p>
-      <ul id="sources"></ul>
+      <!-- 顶部：图源选择 + 状态 -->
+      <header class="toolbar">
+        <h1>MoeWallpaper</h1>
+        <select id="source-select" disabled>
+          <option value="">载入图源中…</option>
+        </select>
+      </header>
+
+      <!-- 状态提示条（加载中 / 空 / 出错） -->
+      <p id="status" class="status">载入中…</p>
+
+      <!-- 缩略图网格 -->
+      <div id="grid" class="grid"></div>
+
+      <!-- 操作反馈 toast -->
+      <div id="toast" class="toast" hidden></div>
     </main>
   </body>
 </html>
