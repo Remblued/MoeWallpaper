@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MoeWallpaper</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <main class="container">
+      <!-- 顶部：图源选择 + 状态 -->
+      <header class="toolbar">
+        <h1>MoeWallpaper</h1>
+        <select id="source-select" disabled>
+          <option value="">载入图源中…</option>
+        </select>
+      </header>
+
+      <!-- 状态提示条（加载中 / 空 / 出错） -->
+      <p id="status" class="status">载入中…</p>
+
+      <!-- 缩略图网格 -->
+      <div id="grid" class="grid"></div>
+
+      <!-- 操作反馈 toast -->
+      <div id="toast" class="toast" hidden></div>
+    </main>
+  </body>
+</html>
