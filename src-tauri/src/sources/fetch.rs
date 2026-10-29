@@ -15,7 +15,7 @@ pub const DEFAULT_LIMIT: u32 = 20;
 /// 一个 Client 内部维护连接池（TCP 连接、TLS 握手结果）。
 /// 每次新建 = 每次重新握手 TLS，多花几十到几百毫秒。
 /// `OnceLock` 保证全进程只建一次，第一次调用时初始化。
-fn client() -> &'static reqwest::Client {
+pub(crate) fn client() -> &'static reqwest::Client {
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
 
     CLIENT.get_or_init(|| {
@@ -39,46 +39,45 @@ pub fn substitute_placeholders(url: &str, page: u32, limit: u32) -> String {
 }
 
 /// 从指定图源拉一页图片。
-/// # 实现步骤
 pub async fn fetch_source_images(
     source: &WallpaperSource,
     page: u32,
 ) -> Result<Vec<ImageRef>, String> {
-    // 1. 拼地址 放行GET
+    // 拼地址
     let url = substitute_placeholders(&source.request.url, page, DEFAULT_LIMIT);
 
-    // 2. 只放行 GET；没配 method 视为默认 GET
+    // 只放行 GET；没配 method 视为默认 GET
     if let Some(m) = &source.request.method
         && !m.eq_ignore_ascii_case("GET")
     {
         return Err(format!("图源 {} 暂不支持 {} 方法", url, m));
     }
 
-    //2+3.建立请求 + 请求头
+    // 建请求 + 请求头
     let mut req = client().get(&url);
     for (k, v) in &source.request.headers {
         req = req.header(k, v);
     }
 
-    //4.发出去
+    // 发出去
     let resp = req
         .send()
         .await
         .map_err(|e| format!("请求 {} 失败: {}", url, e))?;
 
-    // 5. 查状态码
+    // 查状态码
     let status = resp.status();
     if !status.is_success() {
         return Err(format!("请求 {} 返回状态码 {}", url, status));
     }
 
-    // 6. 读 JSON
+    // 读 JSON
     let value = resp
         .json::<serde_json::Value>()
         .await
         .map_err(|e| format!("解析 {} 的 JSON 失败: {}", url, e))?;
 
-    // 7. 交给现成提取函数
+    // 提取
     crate::sources::extract::extract_images(&source.response, &value)
         .map_err(|e| format!("从 {} 提取图片失败: {}", url, e))
 }
@@ -110,8 +109,7 @@ mod tests {
     /// `example.invalid` 这个域名永远不会解析成功（`.invalid` 是 RFC 2606
     /// 保留给"保证不存在"的域名），所以这条测试**不依赖真实网络**，也不会被墙。
     ///
-    /// 它现在应该是**红的**——因为 `fetch_source_images` 还是 `todo!()`。
-    /// 你的任务就是让它变绿。
+    /// 它验证两件事：坏地址必须返回 `Err`，且错误信息里带请求地址。
     #[tokio::test]
     async fn example_source_fails_with_readable_error() {
         let source = crate::sources::loader::load_builtin()

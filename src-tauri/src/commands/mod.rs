@@ -2,7 +2,7 @@ use crate::sources::dto::ImageDto;
 use crate::sources::fetch;
 use crate::sources::loader;
 use crate::sources::model::WallpaperSource;
-use crate::wallpaper::{download, set};
+use crate::wallpaper::{current, download, set};
 
 /// 返回内置图源列表，供前端渲染。
 ///
@@ -34,10 +34,11 @@ pub async fn fetch_images(source_id: String, page: u32) -> Result<Vec<ImageDto>,
 
 /// 把一张远程图片设为桌面壁纸。
 ///
-/// 两步：先确保图片在本地缓存里，再交给 Win32。
+/// 三步：下载进缓存 → 复制到固定的当前壁纸路径 → 交给 Win32。
 /// 前端只管传 URL，不需要知道缓存路径长什么样。
 #[tauri::command]
 pub async fn set_wallpaper(image_url: String) -> Result<(), String> {
-    let path = download::ensure_cached(&image_url).await?;
-    set::set_wallpaper(&path)
+    let cached = download::ensure_cached(&image_url).await?;
+    let current = current::publish(&cached)?;
+    set::set_wallpaper(&current)
 }
