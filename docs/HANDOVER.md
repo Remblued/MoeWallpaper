@@ -138,7 +138,7 @@ Meowallpaper/
 
 **这是最重要的部分。** 前端和后端各自按这张表写，不用等对方。
 
-### 已实现
+### 已实现（四个命令，前端都接得上）
 
 ```rust
 list_sources() -> Result<Vec<WallpaperSource>, String>
@@ -148,21 +148,17 @@ fetch_images(source_id: String, page: u32) -> Result<Vec<ImageDto>, String>
 
 // 下载 → 缓存 → 复制到 current.jpg → 设成桌面壁纸（一步到位）
 set_wallpaper(image_url: String) -> Result<(), String>
-```
 
-### 待实现（A 负责，B 可以照着先把界面写好）
-
-```rust
-// 把远程图片存到用户的「图片」目录，返回完整的本地路径。
+// 下载 → 缓存 → 存到用户的「图片」目录，返回绝对路径
 save_image(image_url: String) -> Result<String, String>
 ```
 
-约定：
+### `save_image` 的行为约定（已实现，别改这些）
 
 - 目标目录：`%USERPROFILE%\Pictures\MoeWallpaper\`
 - **重名不覆盖**：`xxx.png` 已存在就存成 `xxx (1).png`
 - 返回值是绝对路径，前端可以直接提示「已保存到 …」
-- 实现放 `wallpaper/save.rs`，`commands/` 里只留门面
+- 先走缓存：刚设过壁纸的图，保存是瞬间完成的，不会重新下载
 
 **为什么不能复用 `set_wallpaper` 里的下载**：缓存会被清、会被覆盖，而用户"下载"下来的东西必须放在他自己的目录里、由他自己支配。**这两个是完全不同的语义，共用一个函数迟早出事。**
 
@@ -233,7 +229,7 @@ interface ImageDto {
 | A2 | `ImageRef → ImageDto`（缩略图回退） | ✅ |
 | A3 | `set_wallpaper`：Win32 FFI | ✅ |
 | A4 | `ensure_cached`：下载 + 缓存 | ✅ |
-| **A5** | `save_image`：存到用户的图片目录 | ⬜ |
+| **A5** | `save_image`：存到用户的图片目录 | ✅ |
 | **A6** | 接一个真实的公开图源（**只改 JSON，不写代码**） | ⬜ |
 | **A7** | 定时切换（托盘常驻 + 后台定时器） | ⬜ |
 | **A8** | 窗口半透明（改 `tauri.conf.json`，见 B8） | ⬜ |
