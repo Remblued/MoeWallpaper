@@ -1,68 +1,56 @@
-//! 把一张本地图片设为桌面壁纸（Win32 部分）。
-
+use std::ffi::c_void;
 use std::path::Path;
 
+#[link(name = "user32")]
+unsafe extern "system" {
+    fn SystemParametersInfoW(
+        ui_action: u32,        // UINT
+        ui_param: u32,         // UINT
+        pv_param: *mut c_void, // PVOID
+        f_win_ini: u32,        // UINT
+    ) -> i32; // BOOL
+}
+
+const SPI_SETDESKWALLPAPER: u32 = 0x0014;
+const SPIF_UPDATEINIFILE: u32 = 0x01;
+const SPIF_SENDCHANGE: u32 = 0x02;
+
 /// 把 Rust 字符串转成 Win32 要的宽字符串。
-///
-/// Windows 的 NT 内核从 1993 年起就用 UTF-16 当原生编码，所有 `...W` 结尾的 API
-/// 都吃 UTF-16；而 Rust 的 `String` 是 UTF-8，必须转。
-///
-/// 另外 Win32 的字符串**没有长度参数**，它靠「读到 0 就停」判断结尾。
-/// 所以末尾那个 `0` 不是可选的——少一个 0，Windows 会继续往后读内存，
-/// 一直到撞见某个 0 为止，轻则路径错乱，重则崩溃。
 pub fn to_wide(s: &str) -> Vec<u16> {
     let mut buf: Vec<u16> = s.encode_utf16().collect();
     buf.push(0);
     buf
 }
 
-// ============================================================================
-//  下面这个函数由你实现（A3 的核心）
-// ============================================================================
-
-/// 把本地图片文件设为桌面壁纸。
-///
-/// # 你要调的 Win32 函数
-///
-/// 只有一个：`SystemParametersInfoW`，在 `user32.dll` 里，C 签名是：
-///
-/// ```c
-/// BOOL SystemParametersInfoW(
-///     UINT  uiAction,   // 做什么  → SPI_SETDESKWALLPAPER = 0x0014
-///     UINT  uiParam,    // 固定传 0
-///     PVOID pvParam,    // 参数   → 指向图片绝对路径的 u16 数组
-///     UINT  fWinIni     // 副作用 → SPIF_UPDATEINIFILE | SPIF_SENDCHANGE
-/// );
-/// ```
-///
-/// 返回值是 `BOOL`：成功 `1`，失败 `0`（不会告诉你失败原因，就是这么原始）。
-///
-/// # Rust 怎么声明它
-///
-/// 1. 用 `unsafe extern "system" { ... }` 包起来。
-///    `unsafe` 是必须的：Rust 2024 要求所有外部函数声明都显式标注不安全。
-///    `"system"` 指 Windows 的调用约定，写错会让栈错乱。
-/// 2. 块上面加 `#[link(name = "user32")]`，告诉链接器去 user32 库找符号。
-/// 3. 参数类型对应关系：
-///    `UINT` → `u32`，`PVOID` → `*mut std::ffi::c_void`，`BOOL` → `i32`
-/// 4. 函数名照抄 `SystemParametersInfoW`，**W 不能丢**，丢了会链接到 ANSI 版本
-///
-/// # 实现步骤
-///
-/// 1. 绝对路径：`path.canonicalize()`，失败要转成 `Err`——Windows 不认相对路径
-/// 2. 转宽字符：`to_wide(&绝对路径.to_string_lossy())`
-/// 3. 取指针：`wide.as_ptr()` 是 `*const u16`，要 `.cast()` 成 `*mut c_void`
-/// 4. 调用放在 `unsafe { }` 里（编译器不会帮你检查外部函数的安全性）
-/// 5. 判断返回值：`0` 就是失败，返回 `Err`
-///
-/// 提示：`canonicalize` 在 Windows 上会加 `\\?\` 前缀，多数情况没问题；
-/// 如果发现壁纸设不上，把它去掉再试（用 `strip_prefix` 或者干脆不 canonicalize，
-/// 改用 `std::path::absolute`，标准库 1.79 起可用）。
+//UNC 路径不管!
 pub fn set_wallpaper(path: &Path) -> Result<(), String> {
-    // TODO(你写)：按上面 5 步实现。
-    // 现在这行只是为了让变量被"用到"，你写完后删掉它。
-    let _ = path;
-    todo!("set_wallpaper 由你实现")
+    // 1. 绝对路径
+    let abs = path
+        .canonicalize()
+        .map_err(|e| format!("无法解析壁纸路径 {}: {}", path.display(), e))?;
+
+    // canonicalize 在 Windows 上会加 \\?\ 前缀，某些旧接口不认,小改一下
+    let abs_str = abs.to_string_lossy();
+    let abs_str = abs_str.strip_prefix(r"\\?\").unwrap_or(abs_str.as_ref());
+
+    // 2. 转宽字符 —— 必须绑定到局部变量！
+    let wide = to_wide(abs_str);
+
+    // 3 + 4. 取指针、调用
+    let ret = unsafe {
+        SystemParametersInfoW(
+            SPI_SETDESKWALLPAPER,
+            0,
+            wide.as_ptr().cast_mut().cast(),
+            SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
+        )
+    };
+
+    // 5. BOOL：0 就是失败，而且不告诉原因
+    if ret == 0 {
+        return Err(format!("SystemParametersInfoW 设置壁纸失败: {}", abs_str));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -82,5 +70,14 @@ mod tests {
         let w = to_wide("壁纸");
         assert_eq!(w.last(), Some(&0));
         assert_eq!(w.len(), 2 + 1);
+    }
+
+    #[test]
+    #[ignore = "会真的修改桌面，只能手动跑"]
+    fn sets_real_wallpaper() {
+        let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("icons/128x128.png");
+        assert!(p.exists(), "图标不存在: {}", p.display());
+
+        set_wallpaper(&p).expect("设置壁纸应该能成功");
     }
 }
