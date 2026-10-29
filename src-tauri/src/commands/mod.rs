@@ -1,8 +1,9 @@
+use crate::fs::{naming, paths};
 use crate::sources::dto::ImageDto;
 use crate::sources::fetch;
 use crate::sources::loader;
 use crate::sources::model::WallpaperSource;
-use crate::wallpaper::{current, download, set};
+use crate::wallpaper::{current, download, save, set};
 
 /// 返回内置图源列表，供前端渲染。
 ///
@@ -41,4 +42,18 @@ pub async fn set_wallpaper(image_url: String) -> Result<(), String> {
     let cached = download::ensure_cached(&image_url).await?;
     let current = current::publish(&cached)?;
     set::set_wallpaper(&current)
+}
+
+/// 把一张远程图片存到用户的「图片」目录，返回保存后的完整路径。
+///
+/// 先走缓存：如果这张图刚设过壁纸，保存就是瞬间完成的，不会重新下载。
+#[tauri::command]
+pub async fn save_image(image_url: String) -> Result<String, String> {
+    let cached = download::ensure_cached(&image_url).await?;
+    let dir = paths::pictures_dir()?;
+    let stem = naming::friendly_stem(&image_url);
+
+    let dest = save::save_unique(&cached, &dir, &stem)?;
+
+    Ok(dest.to_string_lossy().into_owned())
 }

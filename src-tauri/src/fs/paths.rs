@@ -29,6 +29,19 @@ pub fn current_file() -> Result<PathBuf, String> {
     Ok(cache_dir()?.join("current.jpg"))
 }
 
+/// 用户下载的图片放在这里：`%USERPROFILE%\Pictures\MoeWallpaper`。
+///
+/// **这和缓存是两个完全不同的地方。**
+/// - 缓存是我们的：随时可以清，丢了用户也不该心疼
+/// - 这里是用户的：他自己下的东西，删不删由他决定
+///
+/// 混在一起，早晚出现"清缓存把用户存了半年的图删了"这种事。
+pub fn pictures_dir() -> Result<PathBuf, String> {
+    let base =
+        std::env::var("USERPROFILE").map_err(|_| "找不到环境变量 USERPROFILE".to_string())?;
+    Ok(PathBuf::from(base).join("Pictures").join("MoeWallpaper"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

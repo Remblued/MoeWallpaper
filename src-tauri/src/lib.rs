@@ -19,6 +19,7 @@ pub fn run() {
             commands::list_sources,
             commands::fetch_images,
             commands::set_wallpaper,
+            commands::save_image,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
