@@ -2,37 +2,48 @@
 
 use std::path::{Path, PathBuf};
 
-// 提示：写到一半嫌 `crate::fs::dirs::...` 太长，可以在顶部加
-// `use crate::fs::{dirs, files};`，然后把下面步骤里的全路径换短。
-// 现在不加是因为：还没人用它们，clippy 会报 `unused imports`。
+use crate::fs::{dirs, files};
 
-// ============================================================================
-//  下面这个函数由你实现（A5 的核心）
-// ============================================================================
-
-/// 把一个本地文件复制到 `dir` 下，命名成 `stem.ext`，返回最终路径。
+/// 把文件复制到 `dir` 下，命名为 `stem.<原扩展名>`，返回最终路径。
 ///
-/// 目录里已有同名文件时，依次尝试 `stem (1).ext`、`stem (2).ext`……
-/// **绝不覆盖用户已有的文件。**
+/// 同名文件已存在时依次尝试 `stem (1).ext`、`stem (2).ext`……
+/// **绝不覆盖已有文件**——用户可能已经存过同名文件并改过内容，
+/// 应用无权替他决定"覆盖"还是"再存一份"。
 ///
-/// # 实现步骤
-///
-/// 1. 目录不存在就建：`crate::fs::dirs::ensure_dir(dir)?`——用户第一次点下载时目录还不存在
-/// 2. 取扩展名：`src.extension()`。取不到就当成 `"png"`（宁可后缀不准，也别存成无后缀文件）
-/// 3. 拼第一个候选：`dir.join(format!("{stem}.{ext}"))`
-/// 4. 循环判断：候选**不存在**就写进去并返回；存在就把名字换成 `stem (n).ext` 再试
-/// 5. 写入用 `crate::fs::files::write_atomic(&candidate, &bytes)`，字节先 `std::fs::read(src)`
-/// 6. **循环必须设上限**（比如 1000 次）。没有上限的话，一旦目录状态异常
-///    （比如候选路径永远判断为"存在"），这个函数会转到天荒地老，
-///    而且是在后台线程里转，用户只能看到界面卡住
-///
-/// # 为什么不能直接覆盖
-///
-/// 用户可能已经把上一张存成同名文件、还改了内容。应用无权替他决定
-/// "覆盖掉那张"还是"再存一张"。**默认不覆盖，是唯一安全的默认值。**
+/// 目标目录不存在时会自动创建（用户第一次点下载时目录还不存在）。
 pub fn save_unique(src: &Path, dir: &Path, stem: &str) -> Result<PathBuf, String> {
-    let _ = (src, dir, stem);
-    todo!("save_unique 由你实现")
+    // 1. 目录不存在就建——用户第一次点下载时目录还不存在
+    dirs::ensure_dir(dir)?;
+
+    // 2. 取扩展名，取不到就当成 "png"
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("png");
+
+    // 3. 先把字节读出来，避免在循环里反复读盘
+    let bytes = std::fs::read(src).map_err(|e| format!("读取源文件 {:?} 失败: {e}", src))?;
+
+    // 4. 循环上限：目录状态异常时不要转一辈子
+    const MAX_ATTEMPTS: usize = 1000;
+
+    // 5. 依次尝试 `stem.ext`、`stem (1).ext`、`stem (2).ext`……
+    for n in 0..MAX_ATTEMPTS {
+        let candidate: PathBuf = if n == 0 {
+            dir.join(format!("{stem}.{ext}"))
+        } else {
+            dir.join(format!("{stem} ({n}).{ext}"))
+        };
+
+        if candidate.exists() {
+            continue;
+        }
+
+        // 6. 原子写入，成功即返回
+        files::write_atomic(&candidate, &bytes)?;
+        return Ok(candidate);
+    }
+
+    Err(format!(
+        "在 {dir:?} 下尝试了 {MAX_ATTEMPTS} 个候选文件名，均不可用"
+    ))
 }
 
 #[cfg(test)]
