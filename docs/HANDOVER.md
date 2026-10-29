@@ -95,9 +95,9 @@ Meowallpaper/
 ├─ src-tauri/src/
 │  ├─ lib.rs                   ← 组装：注册命令
 │  ├─ commands/mod.rs          ← 门面层：只有 #[tauri::command]，不做逻辑
-│  ├─ fs/                      ← 文件系统：paths / dirs / files
-│  ├─ sources/                 ← 图源：model(结构) / loader(加载) / extract(提取)
-│  └─ （待建）wallpaper/       ← 设置壁纸的实现
+│  ├─ fs/                      ← paths(路径) / dirs(建目录) / files(原子写) / naming(URL→文件名)
+│  ├─ sources/                 ← model(结构) / loader(加载) / extract(提取) / fetch(联网) / dto(出参)
+│  └─ wallpaper/               ← set(调 Win32) / download(下载缓存)
 └─ docs/
    ├─ BENCHMARK.md             ← 安装包体积怎么测（还没测）
    └─ HANDOVER.md              ← 本文件
@@ -191,12 +191,15 @@ interface ImageDto {
 
 ### A 的任务（按顺序）
 
-| # | 任务 | 验收标准 |
-|---|---|---|
-| A1 | 加 `reqwest`，实现 `fetch_images`：替换 `{page}`/`{limit}` → 发请求 → `extract_images` | 对着 `example.invalid` 报出可读的错；占位符替换有单元测试 |
-| A2 | `ImageRef → ImageDto`（含缩略图回退） | 单测：缺 thumbnail 时回退成 image_url |
-| A3 | 实现 `set_wallpaper`（Win32） | 能真的把桌面换掉；失败时有明确错误 |
-| A4 | 下载 + 缓存到 `wallpapers/`，原子写 | 重复设置同一张不重复下载 |
+| # | 任务 | 状态 | 验收标准 |
+|---|---|---|---|
+| A1 | 实现 `sources/fetch.rs::fetch_source_images` | 脚手架已好，**函数体待写** | 对着 `example.invalid` 报出可读的错（带状态码和 URL） |
+| A2 | `ImageRef → ImageDto`（含缩略图回退） | ✅ 完成 | 单测：缺 thumbnail 时回退成 image_url |
+| A3 | 实现 `wallpaper/set.rs::set_wallpaper`（Win32 FFI） | 脚手架已好，**函数体待写** | 能真的把桌面换掉；失败时有明确错误 |
+| A4 | 实现 `wallpaper/download.rs::ensure_cached` | 脚手架已好，**函数体待写** | 重复设置同一张，第二次不发网络请求 |
+
+三个待写函数在文件里都标了 `todo!`，上方注释写了具体步骤。
+写完后把 `let _ = xxx;` 那几行占位代码删掉。
 
 ### B 的任务（按顺序，**不用等 A**）
 

@@ -26,6 +26,8 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# HTTP 客户端。Windows 上 TLS 用系统自带的 Schannel，不额外打包 OpenSSL，对体积友好。
+reqwest = { version = "0.12", features = ["json"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
