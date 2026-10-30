@@ -80,19 +80,35 @@ $sum = ($app.WorkingSet64 | Measure-Object -Sum).Sum +
 
 ## 3. Electron 基线
 
-放在 `bench/electron-baseline/`（**尚未创建**，做这一步时再建）：
+已建在 `bench/electron-baseline/`，源码提交进仓库（`node_modules/`、`dist/` 由根
+`.gitignore` 排除）。刻意做到**最小**：一个空白窗口，不加载任何图片、不做任何业务。
+它代表 Electron 的下限，不是它做壁纸应用时的真实成本。
 
 ```powershell
-mkdir bench\electron-baseline
 cd bench\electron-baseline
-npm init -y
-npm i -D electron electron-builder
-# 写最小 main.js + index.html（一个空白窗口即可，不做任何业务）
+npm install
 npx electron-builder --win nsis
 ```
 
-然后对产物执行 2.1–2.4 的**同一套命令**。基线源码要提交进仓库（可复现），但
-`node_modules/`、`dist/`、`release/` 必须 ignore。
+产物：`dist\BaselineElectron Setup 1.0.0.exe`（安装包）、`dist\win-unpacked\`（安装内容）。
+
+### 3.1 尺寸怎么量
+
+安装包就是 2.1 那条命令的产物。**安装后体积这一项没有"真装一遍"**：
+electron-builder 的 NSIS 安装器就是把这 73 个文件原样铺到安装目录，所以量
+`dist\win-unpacked\` 等同于量装完的目录，差别只有约 0.3 MB 的卸载器。这一点必须
+写进记录，因为方法和 MoeWallpaper 那边（真装到 `D:\bench\install`）不完全一样。
+
+```powershell
+(Get-ChildItem 'bench\electron-baseline\dist\win-unpacked' -Recurse -File |
+  Measure-Object Length -Sum).Sum
+```
+
+### 3.2 冷启动和内存还没测
+
+这两项需要在**能正常启动 GUI 进程的桌面会话**里跑 2.3 / 2.4 的命令，命令本身通用：
+把 `$exe` 换成 `dist\win-unpacked\BaselineElectron.exe`，进程名换成
+`BaselineElectron`。没跑过之前，README 里这两格保持 `TBD`。
 
 ## 4. 对比纪律
 
@@ -114,8 +130,8 @@ Defender    实时保护关闭（RealTimeProtectionEnabled = False）
 安装目录    D:\bench\install
 
                MoeWallpaper    Electron 基线
-安装包         1.69 MB         TBD
-安装后         5.19 MB         TBD
+安装包         1.69 MB         115.57 MB
+安装后         5.19 MB         356.77 MB
 冷启动(中位)    41 ms           TBD
 空闲内存        212 MB（私有）   TBD
 ```
@@ -165,9 +181,39 @@ browser        31.4      6.4
 （6.4 MB）高一个数量级。想真正降内存，方向在 WebView2 的 GPU 合成，不在我们的
 Rust 代码。
 
+### Electron 基线 · 同一天 · 同一台机器
+
+工具链 electron-builder 26.18.0 / electron 45.1.0 / 目标 NSIS / 未做代码签名。
+基线页面是**一个空白窗口**，不加载图片——下面每个数字都是 Electron 的下限。
+
+```text
+安装包     121,183,964 B = 115.57 MB   （dist\BaselineElectron Setup 1.0.0.exe）
+安装内容   374,097,173 B = 356.77 MB   （dist\win-unpacked，73 个文件）
+```
+
+体积去哪了（`dist\win-unpacked` 内，按大小排序）：
+
+```text
+BaselineElectron.exe      238.23 MB   ← 单个可执行文件
+dxcompiler.dll             24.58 MB
+resources.pak              12.75 MB
+icudtl.dat                 10.32 MB
+LICENSES.chromium.html      5.44 MB
+vk_swiftshader.dll          5.20 MB
+d3dcompiler_47.dll          4.53 MB
+ffmpeg.dll                  2.95 MB
+locales\*.pak              48.82 MB   （55 个语言包，本项目一个都用不上）
+```
+
+对照：`BaselineElectron.exe` 一个文件（238.23 MB）就是 MoeWallpaper 整个安装目录
+（5.19 MB）的 46 倍。安装包整体差 68 倍（115.57 / 1.69）。
+
+**冷启动和空闲内存这两格仍然是 `TBD`**，原因见 §3.2。
+
 ### 待办
 
-- [ ] Electron 基线（`bench/electron-baseline/`，依赖约 300 MB）
+- [x] Electron 基线的**尺寸**（`bench/electron-baseline/`，已打包测量）
+- [ ] Electron 基线的**冷启动 + 空闲内存**（需能启动 GUI 的桌面会话，§3.2）
 - [ ] 网络恢复后复测一次，确认数字可复现
 
 ### 记录模板
@@ -195,6 +241,6 @@ Defender    默认开启
 | --- | --- |
 | 内存数字特别小 | 只算了主进程，漏了 WebView2 子进程 |
 | 启动特别快 | 测的是热启动（进程还没完全退出就再启一次） |
-| 首次启动特别慢 | Defender 首次扫描；应标注"首次"并排除在 10 次之外 |
+| 首次启动特别慢 | Defender 首次扫描 / 磁盘冷读。**标注出来单独报告，不要静默剔除**（§0 第 5 条）；想要干净的中位数就测 11 次，把首发单独写 |
 | 安装包特别大 | 用 dev 构建测的，或者没开 `[profile.release]` 的 lto/strip |
 | 数字每次都不一样 | 没固定电源模式 / 没关后台任务；先固定条件再谈精度 |

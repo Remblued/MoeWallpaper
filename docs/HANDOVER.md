@@ -56,9 +56,9 @@
 - ❌ 主题色 / 半透明
 - ❌ 国内图源（现状见 §7 技术债：国内免费接口几乎都是"单图 302"，不是列表）
 - ❌ 定时切换
-- ❌ 图标还是 Tauri 默认 logo
 - ❌ 没有 CI
-- ❌ 安装包体积还没测，README 里全是 `TBD`
+- ⚠️ Electron 基线只测了**体积**（安装包 115.57 MB / 安装后 356.77 MB），冷启动和
+  空闲内存仍是 `TBD`，见 `docs/BENCHMARK.md` §3.2
 
 ---
 
@@ -370,8 +370,6 @@ export async function fetchImages(
 | `src/lib/sources/schema.ts` 暂时没人 import | — | 做图源编辑功能时会用到，别当垃圾删了 |
 | 并发下载会撑爆内存（一页 24 张 4K ≈ 120MB） | `wallpaper/download.rs` | 做预加载时必须限并发 |
 | `ToggleChange.kind` 那种"用 String 当枚举"的写法 | 暂无（参考项目里有） | 见到就改成 `enum` |
-| 图标还是 Tauri 默认 logo | `src-tauri/icons/` | 定稿视觉时用 `npm run tauri icon` |
-| README 的实测数字全是 `TBD` | `README.md` | 第一次 `npm run tauri build` 之后 |
 | 没有 CI | — | 等真实图源接上后，加一个跑三道门的 workflow |
 
 ---

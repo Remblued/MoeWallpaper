@@ -30,10 +30,12 @@ MoeWallpaper 押一个判断：壁纸应用不需要为每个应用内置一整�
 
 | 指标 | MoeWallpaper | 最小 Electron 应用 | 怎么测 |
 | --- | --- | --- | --- |
-| 安装包体积（`.exe`） | **1.69 MB** | TBD | 构建产出的安装包文件大小 |
-| 安装后磁盘占用 | **5.19 MB** | TBD | 安装目录下所有文件大小之和 |
+| 安装包体积（`.exe`） | **1.69 MB** | **115.57 MB** | 构建产出的安装包文件大小 |
+| 安装后磁盘占用 | **5.19 MB** | **356.77 MB** | 安装目录下所有文件大小之和 |
 | 冷启动到窗口可见 | **41 ms**（中位数） | TBD | 启动 10 次取中位数，从 `Start-Process` 到窗口出现 |
 | 空闲内存（启动 60 秒后） | **212 MB**（私有） | TBD | 应用进程 + webview 子进程之和，不是只算主进程 |
+
+安装包体积差 **约 68 倍**（115.57 MB 对 1.69 MB）。
 
 测量环境（见 [BENCHMARK 记录](docs/BENCHMARK.md)）：Intel i7-14650HX / 31.6 GB /
 Windows 11 build 26200.9711 / release 构建（LTO + strip）/ commit `74d4170`。
@@ -45,7 +47,12 @@ Windows 11 build 26200.9711 / release 构建（LTO + strip）/ commit `74d4170`�
 - **冷启动是「窗口出现」，不是「画面渲染完成」。** 后者会再晚几百毫秒。
 
 空闲内存报的是**私有内存**（212 MB），不是工作集（371 MB）——工作集把多个进程
-共享的 DLL 重复计算了，数字会虚高。**Electron 基线还是 `TBD`**，等基线打包完再填。
+共享的 DLL 重复计算了，数字会虚高。Electron 那一列的冷启动和空闲内存仍是 `TBD`：
+这两项要在能正常启动 GUI 的桌面会话里，按
+[docs/BENCHMARK.md](docs/BENCHMARK.md) 第 3 节补测。
+
+Electron 那 356.77 MB 不是虚胖出来的：光 `BaselineElectron.exe` **一个文件**就
+238.23 MB，比本项目整个安装目录（5.19 MB）大 46 倍。
 
 这也说明一件事：内存大头是 WebView2 外壳（GPU 进程一项就占 117 MB 私有），
 不是我们 5 MB 的 Rust 代码。这个方向优化不出什么，也不该在 README 里吹。
@@ -54,6 +61,8 @@ Windows 11 build 26200.9711 / release 构建（LTO + strip）/ commit `74d4170`�
 
 - 基线是**最小 Electron 应用**（用 electron-builder 打包的 hello world），不是
   VS Code、Discord 这类完整产品。拿壁纸应用去和代码编辑器比，就是偷换概念。
+- 这个 hello world 只开一个**空白窗口**、不加载任何图片。所以 115.57 MB 是
+  Electron 的**下限**，不是上限——一个真能用的 Electron 壁纸应用只会更大。
 - 一旦测量结果和宣称冲突，**改宣称**。数字是产品，宣传语不是。
 
 ## 功能（v0.1.0）

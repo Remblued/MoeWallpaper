@@ -15,14 +15,18 @@ npx electron-builder --win nsis
 产物：`dist\BaselineElectron Setup 1.0.0.exe`，然后对**它**执行
 `docs/BENCHMARK.md` §2.1–2.4 的同一套测量命令。
 
-## 当前状态：未完成（2026-10-30）
+## 当前状态（2026-10-30）
 
-依赖装好了（`node_modules` 约 82 MB，不入库），但打包卡在**下载工具链**：
+**打包已成功**，尺寸已测：
 
-- 不设代理：`connect ETIMEDOUT 20.205.243.166:443`（GitHub）
-- 设代理：`The server aborted pending request`，下到一半断
+```text
+安装包     121,183,964 B = 115.57 MB
+安装内容   374,097,173 B = 356.77 MB   （dist\win-unpacked，73 个文件）
+```
 
-本机当时走手机热点 + 代理，下载 200 MB 级资源不稳定。**重试只需跑最后一条命令**，
-不需要重装依赖。
+这次一次过，用的网络是手机热点 + 代理。之前失败的两次是
+`connect ETIMEDOUT 20.205.243.166:443` 和 `The server aborted pending request`，
+说明工具链下载（electron 压缩包 + NSIS + 7zip）对**链路稳定性**很敏感，重试是有效手段。
 
-README 里的 Electron 基线因此保持 `TBD`。
+**冷启动和空闲内存仍是 `TBD`**：这两项要求启动 GUI 进程，需要在正常的桌面会话里
+人工跑 `docs/BENCHMARK.md` §3.2。

@@ -31,10 +31,12 @@ until someone can reproduce it. The method lives in [docs/BENCHMARK.md](docs/BEN
 
 | Metric | MoeWallpaper | Minimal Electron app | How it is measured |
 | --- | --- | --- | --- |
-| Installer size (`.exe`) | **1.69 MB** | TBD | file size of the installer produced by the build |
-| Installed size on disk | **5.19 MB** | TBD | sum of all files under the install directory |
+| Installer size (`.exe`) | **1.69 MB** | **115.57 MB** | file size of the installer produced by the build |
+| Installed size on disk | **5.19 MB** | **356.77 MB** | sum of all files under the install directory |
 | Cold start to visible window | **41 ms** (median) | TBD | median of 10 launches, from `Start-Process` to first window |
 | Idle memory (60 s after launch) | **212 MB** (private) | TBD | all app + webview processes, not just the main one |
+
+The installer is **about 68× smaller** (115.57 MB versus 1.69 MB).
 
 Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
 Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
@@ -50,7 +52,12 @@ Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
 
 Idle memory is reported as **private** (212 MB), not working set (371 MB) — summing
 working sets double-counts DLL pages shared between the app and WebView2 processes.
-**The Electron baseline is still `TBD`** until that build is packaged.
+The Electron baseline's cold start and idle memory are still `TBD`: both need a
+desktop session that can launch GUI processes, following
+[docs/BENCHMARK.md](docs/BENCHMARK.md) section 3.
+
+That 356.77 MB is not padding either: a single file, `BaselineElectron.exe`, is
+238.23 MB — 46× the entire installed footprint of this project (5.19 MB).
 
 Worth saying plainly: most of that memory is the WebView2 shell — the GPU process
 alone holds 117 MB private, against 6 MB for our own process. That is not something
@@ -60,6 +67,8 @@ Two rules keep this honest:
 
 - The baseline is a **hello-world Electron app** packaged with electron-builder, not
   VS Code or Discord. Comparing a wallpaper app to a code editor would be cheating.
+- That hello world opens a **blank window** and loads no images. So 115.57 MB is
+  Electron's **floor**, not its ceiling — a real Electron wallpaper app is larger.
 - If a measurement contradicts a claim, **the claim changes**. The numbers are the
   product; the marketing line is not.
 
