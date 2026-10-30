@@ -68,21 +68,25 @@ powershell -ExecutionPolicy Bypass -File .\measure.ps1
 这个坑和 Electron 无关，**MoeWallpaper 自己也会中**，见
 [`docs/BENCHMARK.md`](../../docs/BENCHMARK.md) §2.3。
 
-## 坑：杀软会在启动的一瞬间杀掉它
+## 未解决：启动即崩，`0x80000003`，而且什么都不留
 
-症状：双击 exe → SmartScreen 拦一次 → 点"仍要运行"→ **窗口不出来**。用 PowerShell
+症状：双击 exe → SmartScreen 拦一次 → 点"仍要运行" → **窗口不出来**。从 PowerShell
 启动时进程在 50–100 ms 内退出，`ExitCode = -2147483645`（`0x80000003`，
-`STATUS_BREAKPOINT`），**stderr 为空**，Windows 事件日志和 WER 里**没有任何记录**。
+`STATUS_BREAKPOINT`），**stderr 为空**，事件日志和 WER 里**没有任何记录**。
 
-排查顺序（前两条能排掉一大半误判）：
+已排除的假设（每条都做了实验，不是"看着不像"）：
 
-1. 事件日志没有 `Application Error`、WER 没有报告 → 不像普通崩溃；
-2. 但退出码是 breakpoint → 是被"外力"中断的典型形态；
-3. 查安全软件：`Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct`，
-   再看内核驱动 `Get-CimInstance Win32_SystemDriver | ? { $_.State -eq 'Running' -and $_.Name -match 'klif|klflt|mfe' }`。
+| 假设 | 实验 | 结果 |
+| --- | --- | --- |
+| Shell 的「无法验证发布者」弹窗吃掉了计时 | 改用 `UseShellExecute = $false` 走 CreateProcess | 弹窗消失，**照旧崩** |
+| 第三方杀软拦截（本机 Kaspersky 21.26 + McAfee 残留） | 暂停卡巴保护后重试 | **照旧崩** |
+| `app.asar` 损坏 / 完整性校验失败 | 手工解析 asar（7,360 B，`main.js` 与仓库一致）；解析 PE 取 `.rsrc`（99,328 B） | 结构正常；**没有** `ElectronAsarIntegrity` 资源，校验不可能失败 |
 
-本机命中项：Kaspersky 21.26 的 `KLIF` + `klflt` 驱动（McAfee 服务已停但注册残留）。
-未签名的 238 MB exe 正是这类产品最爱拦的对象。
+关键反证：**第一次打包时窗口 10/10 正常出现**。所以不是"这台机器跑不了 Electron"，
+而是这一次的产物有问题。
 
-处理：把 `bench\` 加进杀软排除项，或测量期间暂停防护。**注意 `docs/BENCHMARK.md` §1
-的要求——两个基线必须在同一防护状态下测。**
+下一步：删掉 `dist` 干净重建 → 仍不行就把 electron 降一个大版本 → 再不行就在 README
+里保留 `TBD` 并写明"本机无法测量"。
+
+**这类问题的排查纪律**：不留痕的闪崩没有单一因果。每排除一条都要写清"用什么实验排除
+的"，否则下次还会从同一个假设重新开始——这一轮已经白跑了两次。
