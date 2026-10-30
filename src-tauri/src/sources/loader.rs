@@ -63,4 +63,33 @@ mod tests {
 
         assert_eq!(ids.len(), total, "有重复的图源 id");
     }
+
+    /// 配了搜索的图源，`search.url` 里必须有 `{query}`。
+    ///
+    /// 没有的话关键词会被**静默丢掉**——用户搜"风景"，拿到的是随机图，
+    /// 程序不报错、界面不提示，这是最难查的一类 bug。
+    /// 这条测试就是防它的。
+    #[test]
+    fn search_urls_actually_use_the_keyword() {
+        let file = load_builtin().unwrap();
+
+        for source in &file.sources {
+            let Some(spec) = &source.search else {
+                continue;
+            };
+
+            assert!(
+                spec.url.contains("{query}"),
+                "图源 {} 的 search.url 里没有 {{query}}：{}",
+                source.id,
+                spec.url
+            );
+            assert!(
+                spec.url.starts_with("https://") || spec.url.starts_with("http://"),
+                "图源 {} 的 search.url 不是 http(s)：{}",
+                source.id,
+                spec.url
+            );
+        }
+    }
 }

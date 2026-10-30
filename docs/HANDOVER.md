@@ -45,9 +45,10 @@
 | 当前壁纸 | 复制到固定的 `current.jpg`，与缓存解耦 | `src-tauri/src/wallpaper/current.rs` |
 | 四个命令 | `list_sources` / `fetch_images` / `set_wallpaper` / `save_image` | `src-tauri/src/commands/mod.rs` |
 | 真实图源 | wallhaven / nekos.best / lolicon，全部免费、无需 API key | `sources/builtin/sources.json` |
+| 关键词搜索 | 每个图源可声明自己的搜索地址；中文走本地词表翻成英文标签 | `src-tauri/src/sources/search.rs` + `search/terms.json` |
 | 前端 | 图源下拉、缩略图网格、四态、toast | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
 
-**测试：44 个（43 个自动跑，1 个标记 `#[ignore]` 手动跑——它会真的改桌面）。`cargo clippy -D warnings` 零告警。**
+**测试：59 个（58 个自动跑，1 个标记 `#[ignore]` 手动跑——它会真的改桌面）。`cargo clippy -D warnings` 零告警。**
 
 ### 未做（这就是接下来的活）
 
@@ -144,8 +145,8 @@ Meowallpaper/
 ```rust
 list_sources() -> Result<Vec<WallpaperSource>, String>
 
-// 拉一页图。page 从 1 开始。
-fetch_images(source_id: String, page: u32) -> Result<Vec<ImageDto>, String>
+// 拉一页图。page 从 1 开始。query 不传 = 浏览，传了 = 搜索
+fetch_images(source_id: String, page: u32, query: Option<String>) -> Result<Vec<ImageDto>, String>
 
 // 下载 → 缓存 → 复制到 current.jpg → 设成桌面壁纸（一步到位）
 set_wallpaper(image_url: String) -> Result<(), String>
@@ -164,6 +165,33 @@ save_image(image_url: String) -> Result<String, String>
 **为什么不能复用 `set_wallpaper` 里的下载**：缓存会被清、会被覆盖，而用户"下载"下来的东西必须放在他自己的目录里、由他自己支配。**这两个是完全不同的语义，共用一个函数迟早出事。**
 
 **详情页不需要新的后端命令。** `ImageDto.imageUrl` 就已经是原图地址，`<img src={imageUrl}>` 直接显示即可——大图不需要经过 Rust。
+
+### 搜索（已实现）
+
+只有配了 `search` 块的图源才支持搜索。还是同一个命令，多传一个 `query`：
+
+```ts
+invoke("fetch_images", { sourceId, page: 1 })                    // 浏览
+invoke("fetch_images", { sourceId, page: 1, query: "风景" })      // 搜索
+```
+
+后端做三件事：
+
+1. **选模板**：有关键词且图源支持搜索 → 用 `search.url`，否则用 `request.url`
+2. **翻译**：`search.english === true` 时查 `search/terms.json`（中文 → 英文标签）。
+   查不到就**原样发出去**，不猜、不拆词、不音译
+3. **编码**：交给 `Url::parse`，中文关键词自动百分号编码
+
+三个内置图源的**实测**行为（不是查文档）：
+
+| 图源 | 参数 | 中文 | 英文 | 日文 |
+|---|---|---|---|---|
+| wallhaven | `q` | ❌ 返回 0 条（所以要翻译） | ✅ | ✅ |
+| lolicon | `keyword` | ✅ 直接用（不翻译） | ✅ | ✅ |
+| nekos.best | `query` + `type=1` | ❌ 400 报错（所以要翻译） | ✅ | ❌ |
+
+**所以前端的提示语很关键**：搜不到结果时不要写"没有结果"，要写
+**"试试英文关键词，或换个图源"**——因为很可能只是这个词没被词表覆盖。
 
 ### `ImageDto` —— 前端拿到的形状（**已定，别改**）
 
@@ -247,9 +275,10 @@ interface ImageDto {
 | A3 | `set_wallpaper`：Win32 FFI | ✅ |
 | A4 | `ensure_cached`：下载 + 缓存 | ✅ |
 | **A5** | `save_image`：存到用户的图片目录 | ✅ |
-| **A6** | 接一个真实的公开图源（**只改 JSON，不写代码**） | ⬜ |
-| **A7** | 定时切换（托盘常驻 + 后台定时器） | ⬜ |
+| **A6** | 接真实图源：wallhaven / nekos.best / lolicon | ✅ |
+| **A7** | 搜索后端：`search` 配置 + `search/terms.json` 中文词表 | ✅ |
 | **A8** | 窗口半透明（改 `tauri.conf.json`，见 B8） | ⬜ |
+| ~~A9~~ | ~~定时切换~~ | **砍掉**，不作为卖点 |
 
 ### B 的任务
 
@@ -263,6 +292,33 @@ interface ImageDto {
 | **B6** | **图片详情页**——最高优先级 | ⬜ |
 | **B7** | 主题色 | ⬜ |
 | **B8** | 半透明 | ⬜ |
+| **B9** | 搜索框 | ⬜ |
+
+### B9 搜索框
+
+后端已经能搜了，只差界面。
+
+- 图源下拉旁边加一个搜索框 + 搜索按钮（回车也能触发）
+- **当前图源不支持搜索时**：搜索框禁用，`placeholder` 写"该图源不支持搜索"
+  （判断依据：`WallpaperSource` 上有没有 `search` 字段）
+- 搜索时 `page` 固定 1；清空搜索框 = 回到浏览模式
+- 搜不到结果时，空状态文案写 **"没搜到，试试英文关键词或换个图源"**——
+  不是"没有结果"，因为很可能只是这个词没被中文词表覆盖
+- 搜索中要有加载态（复用现有骨架屏）
+
+`sourceId` 要同步给 `api.ts`：
+
+```ts
+export async function fetchImages(
+  sourceId: string,
+  page: number,
+  query?: string,          // ← 新增，不传 = 浏览
+): Promise<ImageDto[]> {
+  return invoke<ImageDto[]>("fetch_images", { sourceId, page, query });
+}
+```
+
+**注意**：`query` 是可选参数，不传时 Tauri 会把它当成 `None`，后端按浏览处理。所以这个改动**不会破坏现有调用**。
 
 ### B6 图片详情页（规格）
 
@@ -301,6 +357,8 @@ interface ImageDto {
 | **缓存会记住错误**：下载到一张 HTML 错误页，也会被永久当成"这张图"，不会自愈 | `wallpaper/download.rs` | 加「清空缓存」按钮；临时解法：删掉 `%LOCALAPPDATA%\com.remblued.moewallpaper` |
 | `current.jpg` 里可能装着 PNG 数据，靠 Windows 按内容识别格式 | `wallpaper/current.rs` | 如果哪天换壁纸失效，**优先怀疑这里** |
 | 安全参数靠"记得配"——图源没写 `sfwQuery` 就没有任何内容限制，而这一点只有 code review 能保证 | `sources/builtin/sources.json` | 做用户自定义图源时，在加载阶段强制校验：要么配 `sfwQuery`，要么显式标记"API 本身只提供安全内容" |
+| 中文词表只收了约 150 个高频词，长尾词翻不了（`search/terms.json`） | `search/terms.json` | 持续加词；搜不到时 UI 已提示改用英文 |
+| 英文译名对不上目标站标签就会搜不到（映射正确 ≠ 标签存在） | `search/terms.json` | 加词时**实测一次**：拿翻出来的英文去 wallhaven 搜，看条数是不是 0 |
 | 国内免费接口几乎都是"单图 302 / 直接返回一张图"，不是列表；本项目 schema 只吃列表 | `sources/model.rs` | 要支持单图源，得加一种 source 类型（v0.4 插件化时一起做） |
 | 360 壁纸有动漫分类（`cid=26`），但**不是公开 API**，条款不明，而且 `start` 是偏移量不是页码 | — | 用户要国内源时再单独评估，别默认塞进去 |
 | nekos.best 和 lolicon 不提供缩略图，网格会直接加载原图（一张 2–4MB） | `sources/builtin/sources.json` | 要么限制每页数量，要么后端生成缩略图 |

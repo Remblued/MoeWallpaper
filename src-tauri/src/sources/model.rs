@@ -53,6 +53,29 @@ pub struct SourceFilter {
     pub sfw_query: Option<String>,
 }
 
+/// 搜索能力。
+///
+/// **不配这个块的图源 = 不支持搜索**，界面上搜索框对它禁用。
+/// 这比"配了但静默无效"好：用户能看见边界在哪。
+///
+/// 为什么单独给一个 `url` 而不是复用 `request.url`：
+/// 有些站点的搜索是**另一个端点**。nekos.best 浏览走 `/api/v2/neko`，
+/// 搜索走 `/api/v2/search` 且必须带 `type` 参数——一个地址模板表达不了两件事。
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchSpec {
+    /// 搜索用的完整地址模板，必须包含 `{query}`。
+    ///
+    /// `{page}` / `{limit}` 同样可用。关键词会被百分号编码后填进去。
+    pub url: String,
+    /// 关键词要不要先翻成英文。
+    ///
+    /// - `true`：走 `search/terms.json` 词表（wallhaven、nekos.best 只吃英文）
+    /// - `false`：原样传（lolicon 走 pixiv 标签，中文直接可用）
+    #[serde(default)]
+    pub english: bool,
+}
+
 /// 单个图源。
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,6 +90,9 @@ pub struct WallpaperSource {
     pub response: ResponseMapping,
     #[serde(default)]
     pub filter: SourceFilter,
+    /// 不配 = 不支持搜索。
+    #[serde(default)]
+    pub search: Option<SearchSpec>,
 }
 
 /// `sources/builtin/*.json` 的顶层结构。

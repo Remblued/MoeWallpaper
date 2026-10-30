@@ -2,6 +2,7 @@
 
 use crate::sources::extract::ImageRef;
 use crate::sources::model::{SourceFilter, WallpaperSource};
+use crate::sources::search;
 
 /// 一次请求要几张图。
 ///
@@ -59,16 +60,46 @@ fn apply_sfw_query(url: &str, filter: &SourceFilter) -> String {
     format!("{url}{separator}{query}")
 }
 
+/// 拼出最终要请求的地址。
+///
+/// 三件事按顺序做：
+/// 1. **选模板**：有关键词且图源支持搜索 → 用 `search.url`，否则用 `request.url`
+/// 2. **替换占位符**：`{page}` / `{limit}` / `{query}`
+/// 3. **交给 `Url::parse`** 做百分号编码和合法性校验——中文关键词、空格、`&`
+///    全在这一步被正确处理，不用自己写编码
+///
+/// 为什么第二步不做编码、第三步才做：`Url::parse` 是唯一权威。
+/// 手工拼一个"看起来对"的地址，遇到中文就会发出一个坏请求，
+/// 而且错误信息会是"400 Bad Request"，完全看不出是编码问题。
+fn build_request_url(
+    source: &WallpaperSource,
+    page: u32,
+    query: Option<&str>,
+) -> Result<reqwest::Url, String> {
+    let keyword = query.map(str::trim).filter(|q| !q.is_empty());
+
+    let raw = match (keyword, &source.search) {
+        (Some(kw), Some(spec)) => {
+            let mapped = search::to_source_query(kw, spec.english);
+            substitute_placeholders(&spec.url, page, DEFAULT_LIMIT).replace("{query}", &mapped)
+        }
+        _ => substitute_placeholders(&source.request.url, page, DEFAULT_LIMIT),
+    };
+
+    let raw = apply_sfw_query(&raw, &source.filter);
+
+    reqwest::Url::parse(&raw).map_err(|e| format!("图源 {} 的请求地址不合法 {raw}: {e}", source.id))
+}
+
 /// 从指定图源拉一页图片。
+///
+/// `query` 为空或不传 = 浏览模式；非空且图源配了 `search` = 搜索模式。
 pub async fn fetch_source_images(
     source: &WallpaperSource,
     page: u32,
+    query: Option<&str>,
 ) -> Result<Vec<ImageRef>, String> {
-    // 拼地址：先替换占位符，再注入图源声明的安全参数
-    let url = apply_sfw_query(
-        &substitute_placeholders(&source.request.url, page, DEFAULT_LIMIT),
-        &source.filter,
-    );
+    let url = build_request_url(source, page, query)?;
 
     // 只放行 GET；没配 method 视为默认 GET
     if let Some(m) = &source.request.method
@@ -78,7 +109,7 @@ pub async fn fetch_source_images(
     }
 
     // 建请求 + 请求头
-    let mut req = client().get(&url);
+    let mut req = client().get(url.clone());
     for (k, v) in &source.request.headers {
         req = req.header(k, v);
     }
@@ -185,7 +216,7 @@ mod tests {
     async fn unreachable_source_fails_with_readable_error() {
         let source = test_source("https://example.invalid/api?page={page}");
 
-        let result = fetch_source_images(&source, 1).await;
+        let result = fetch_source_images(&source, 1, None).await;
 
         assert!(result.is_err(), "example.invalid 不可能成功，必须返回 Err");
 
@@ -205,7 +236,7 @@ mod tests {
         let mut source = test_source("https://example.invalid/");
         source.request.method = Some("POST".to_string());
 
-        let message = fetch_source_images(&source, 1).await.unwrap_err();
+        let message = fetch_source_images(&source, 1, None).await.unwrap_err();
 
         assert!(
             message.contains("POST"),
@@ -234,6 +265,74 @@ mod tests {
                 tags: None,
             },
             filter: Default::default(),
+            search: None,
         }
+    }
+
+    fn searchable_source(english: bool) -> WallpaperSource {
+        use crate::sources::model::SearchSpec;
+
+        let mut source = test_source("https://a.com/browse?page={page}");
+        source.search = Some(SearchSpec {
+            url: "https://a.com/search?q={query}&page={page}".to_string(),
+            english,
+        });
+        source
+    }
+
+    #[test]
+    fn without_keyword_the_browse_url_is_used() {
+        let url = build_request_url(&searchable_source(true), 2, None).unwrap();
+        assert_eq!(url.as_str(), "https://a.com/browse?page=2");
+    }
+
+    #[test]
+    fn blank_keyword_counts_as_browsing() {
+        let url = build_request_url(&searchable_source(true), 1, Some("   ")).unwrap();
+        assert_eq!(url.as_str(), "https://a.com/browse?page=1");
+    }
+
+    #[test]
+    fn source_without_search_ignores_the_keyword() {
+        let url = build_request_url(&test_source("https://a.com/browse"), 1, Some("猫")).unwrap();
+        assert_eq!(url.as_str(), "https://a.com/browse");
+    }
+
+    #[test]
+    fn keyword_is_translated_when_english_is_required() {
+        let url = build_request_url(&searchable_source(true), 1, Some("风景")).unwrap();
+        assert_eq!(url.as_str(), "https://a.com/search?q=landscape&page=1");
+    }
+
+    #[test]
+    fn keyword_is_left_alone_when_the_source_reads_chinese() {
+        let url = build_request_url(&searchable_source(false), 1, Some("猫")).unwrap();
+        assert_eq!(url.path(), "/search");
+        assert_eq!(url.query_pairs().find(|(k, _)| k == "q").unwrap().1, "猫");
+    }
+
+    /// 中文关键词必须被百分号编码，否则发出去就是个坏请求。
+    #[test]
+    fn non_ascii_keyword_is_percent_encoded() {
+        let url =
+            build_request_url(&searchable_source(false), 1, Some("某个不存在的番名")).unwrap();
+
+        assert!(
+            url.as_str().contains('%'),
+            "地址里应该有百分号编码，实际是 {}",
+            url.as_str()
+        );
+        assert!(
+            !url.as_str().contains("某个"),
+            "中文不该以原样出现在地址里：{}",
+            url.as_str()
+        );
+    }
+
+    #[test]
+    fn badly_formed_url_is_reported_with_the_source_id() {
+        let message = build_request_url(&test_source("不是个地址"), 1, None).unwrap_err();
+
+        assert!(message.contains("test"), "错误里要带图源 id：{message}");
     }
 }

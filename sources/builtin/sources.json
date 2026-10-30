@@ -21,6 +21,10 @@
       },
       "filter": {
         "sfwQuery": "purity=100"
+      },
+      "search": {
+        "url": "https://wallhaven.cc/api/v1/search?categories=010&q={query}&page={page}",
+        "english": true
       }
     },
     {
@@ -39,6 +43,10 @@
         "itemsPath": "results",
         "imageUrl": "url",
         "pageUrl": "source_url"
+      },
+      "search": {
+        "url": "https://nekos.best/api/v2/search?query={query}&type=1&amount={limit}",
+        "english": true
       }
     },
     {
@@ -59,6 +67,10 @@
       },
       "filter": {
         "sfwQuery": "r18=0"
+      },
+      "search": {
+        "url": "https://api.lolicon.app/setu/v2?num={limit}&keyword={query}&p={page}",
+        "english": false
       }
     }
   ]

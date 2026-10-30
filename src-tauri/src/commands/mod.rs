@@ -18,8 +18,14 @@ pub fn list_sources() -> Result<Vec<WallpaperSource>, String> {
 ///
 /// 这里只是门面：找图源 → 调实现 → 换成前端能吃的形状。
 /// 真正的网络请求在 `sources::fetch`，这里不做任何 HTTP。
+///
+/// `query` 不传或传空 = 浏览；传了关键词且该图源支持搜索 = 搜索。
 #[tauri::command]
-pub async fn fetch_images(source_id: String, page: u32) -> Result<Vec<ImageDto>, String> {
+pub async fn fetch_images(
+    source_id: String,
+    page: u32,
+    query: Option<String>,
+) -> Result<Vec<ImageDto>, String> {
     let file = loader::load_builtin()?;
 
     let source = file
@@ -28,7 +34,7 @@ pub async fn fetch_images(source_id: String, page: u32) -> Result<Vec<ImageDto>,
         .find(|s| s.id == source_id)
         .ok_or_else(|| format!("找不到图源 {source_id:?}"))?;
 
-    let refs = fetch::fetch_source_images(&source, page).await?;
+    let refs = fetch::fetch_source_images(&source, page, query.as_deref()).await?;
 
     Ok(refs.into_iter().map(ImageDto::from).collect())
 }

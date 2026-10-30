@@ -11,9 +11,10 @@
 /** HTTP 请求描述。 */
 export interface HttpRequestSpec {
   /**
-   * 请求地址。支持两个占位符，由代码在发请求前替换：
+   * 请求地址。支持三个占位符，由代码在发请求前替换：
    * - `{limit}`：本次要几张图（当前页大小）
    * - `{page}`：页码，从 1 开始
+   * - `{query}`：搜索关键词（只有在 `search.url` 里才有意义）
    */
   url: string;
   method?: "GET" | "POST";
@@ -58,6 +59,30 @@ export interface SourceFilter {
   sfwQuery?: string;
 }
 
+/**
+ * 搜索能力。
+ *
+ * **不配这个块 = 该图源不支持搜索**，界面上搜索框要对它禁用。
+ * 这比"配了但静默无效"好：用户能看见边界在哪。
+ */
+export interface SearchSpec {
+  /**
+   * 搜索用的完整地址模板，**必须包含 `{query}`**。
+   *
+   * `{page}` / `{limit}` 同样可用。关键词由后端编码后填入。
+   * 之所以不复用 `request.url`：有些站点的搜索是另一个端点
+   * （nekos.best 浏览走 `/api/v2/neko`，搜索走 `/api/v2/search` 且必须带 `type`）。
+   */
+  url: string;
+  /**
+   * 关键词要不要先翻成英文（走 `search/terms.json` 词表）。
+   *
+   * - `true`：wallhaven / nekos.best 只认英文
+   * - `false`：lolicon 走 pixiv 标签，中文直接可用
+   */
+  english?: boolean;
+}
+
 /** 单个图源。 */
 export interface WallpaperSource {
   /** 稳定标识，用于缓存目录名和用户配置引用；发布后不要改。 */
@@ -71,6 +96,8 @@ export interface WallpaperSource {
   request: HttpRequestSpec;
   response: ResponseMapping;
   filter?: SourceFilter;
+  /** 不配 = 不支持搜索。 */
+  search?: SearchSpec;
 }
 
 /** `sources/builtin/*.json` 的顶层结构。 */
