@@ -49,3 +49,21 @@ powershell -ExecutionPolicy Bypass -File .\measure.ps1
 
 修法就是留一个模块级引用（现在的写法）。`measure.ps1` 因此把"进程是否还活着"
 做成硬检查：测不到就报错，不返回数字。
+
+## 坑：启动前弹「打开文件 - 安全警告」
+
+现象：脚本跑 10 次，其中 9 次报"窗口没出现或进程提前退出"，屏幕上还留着一个
+「打开文件 - 安全警告：无法验证发布者」的窗口。
+
+**那个弹窗不是程序弹的**，程序当时还没被创建——是 Windows Shell 在 `Start-Process`
+（ShellExecute）阶段做发布者验证时拦下来的。于是：
+
+- 计时里混进了等人的那几秒（测出一发 14207 ms，纯粹是人的反应时间）；
+- 进程可能在弹窗被取消后直接退出，看起来像"程序起不来"。
+
+修法在 `measure.ps1` 里：用 `[System.Diagnostics.Process]::Start` 配
+`UseShellExecute = $false`，走 CreateProcess，完全绕开 Shell。这不只是躲弹窗，也是
+更干净的测量——Shell 扩展加载本来就和冷启动无关。
+
+这个坑和 Electron 无关，**MoeWallpaper 自己也会中**，见
+[`docs/BENCHMARK.md`](../../docs/BENCHMARK.md) §2.3。

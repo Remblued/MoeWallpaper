@@ -44,11 +44,21 @@ $sum = (Get-ChildItem 'D:\bench\install' -Recurse -File | Measure-Object Length 
 
 ### 2.3 冷启动到窗口可见
 
+**必须用 CreateProcess 启动，不要用 `Start-Process`。**
+
+`Start-Process` 走的是 ShellExecuteEx，Windows Shell 会在**进程被创建之前**做一次
+"发布者验证"。遇到未签名、或带"来自 Internet"标记（Zone.Identifier）的程序，它会弹
+「打开文件 - 安全警告：无法验证发布者」。那个弹窗不是程序弹的——程序根本还没启动；
+用户点一下，**人的反应时间就被算进了冷启动**。更麻烦的是这个污染长得像一个"很慢的
+程序"，而不是像一个缺陷。Shell 扩展加载本身也属于与启动无关的开销。
+
 ```powershell
-$exe = 'C:\Program Files\MoeWallpaper\moe-wallpaper.exe'
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName      = 'C:\Program Files\MoeWallpaper\moe-wallpaper.exe'
+$psi.UseShellExecute = $false      # ← 关键：走 CreateProcess，绕开 Shell
 $t = foreach ($i in 1..10) {
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
-  $p  = Start-Process $exe -PassThru
+  $p  = [System.Diagnostics.Process]::Start($psi)
   while ($p.MainWindowHandle -eq 0) { Start-Sleep -Milliseconds 10; $p.Refresh() }
   $sw.Stop()
   $p.CloseMainWindow() | Out-Null
@@ -61,6 +71,10 @@ $s = $t | Sort-Object
 
 口径说明：这是"到窗口句柄出现"的时间，**不是**"首屏渲染完成"。WebView2 的渲染发生
 在窗口之后，两者相差可能几百毫秒。README 必须按这个口径措辞。
+
+⚠️ **历史数据不一致**：2026-10-30 记的 MoeWallpaper 冷启动 41 ms 是用旧的
+`Start-Process`（Shell 路径）测出来的。在按本节口径补测之前，两个基线的冷启动
+**不能直接对比**——这条已记在 §5 待办里。
 
 ### 2.4 空闲内存
 
@@ -156,6 +170,9 @@ min=29  median=41  max=200
 
 首次 200 ms 含磁盘冷读，按要求**没有剔除**（§0 第 5 条：异常值不删，单独写出来）。
 
+⚠️ 这 10 发是用**已废弃的** `Start-Process`（Shell 路径）测的，见 §2.3。在按新口径
+补测之前，41 ms 只用于"本项目自身的历史对比"，**不用于和 Electron 基线对比**。
+
 **空闲内存 3 次，启动后静置 60 秒，6 个进程**（应用 1 + WebView2 5）：
 
 ```text
@@ -219,7 +236,8 @@ locales\*.pak              48.82 MB   （55 个语言包，本项目一个都用
 ### 待办
 
 - [x] Electron 基线的**尺寸**（`bench/electron-baseline/`，已打包测量）
-- [ ] Electron 基线的**冷启动 + 空闲内存**（需能启动 GUI 的桌面会话，§3.2）
+- [ ] Electron 基线的**冷启动 + 空闲内存**（`bench/electron-baseline/measure.ps1`）
+- [ ] 用 §2.3 的新口径（CreateProcess）**复测 MoeWallpaper 冷启动**，替换 41 ms
 - [ ] 网络恢复后复测一次，确认数字可复现
 
 ### 记录模板
@@ -251,3 +269,5 @@ Defender    默认开启
 | 安装包特别大 | 用 dev 构建测的，或者没开 `[profile.release]` 的 lto/strip |
 | 数字每次都不一样 | 没固定电源模式 / 没关后台任务；先固定条件再谈精度 |
 | 测内存时进程不见了 | Electron 的 `BrowserWindow` 没被引用，被 GC 后窗口自动关闭，`window-all-closed` 让应用干净退出——**不报错、不留事件日志**，极容易被误判成"程序启动失败" |
+| 冷启动忽快忽慢，慢起来像几秒到十几秒 | 启动命令走 Shell（`Start-Process`）时可能弹「打开文件 - 安全警告」，程序还没创建就在等人点鼠标。改用 `UseShellExecute = $false`（§2.3） |
+| 某个指标每次都不稳定，又说不出规律 | 先怀疑"测量工具污染被测对象"：脚本自己定期跑的东西（枚举进程、轮询磁盘）也会抢 CPU。把诊断性轮询降到 500 ms 级 |
