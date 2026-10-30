@@ -17,6 +17,24 @@ if (-not (Test-Path $exe)) {
 
 $procName = 'BaselineElectron'
 
+# 数字必须带着它的条件一起走。三个月后没人记得这台机器当时装了什么安全软件，
+# 而安全软件会 hook 每一次进程创建，直接影响冷启动——记录里不写，就等于没测过。
+Write-Host '--- 测量环境 ---'
+$av = @(Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue)
+if ($av.Count) {
+    $av | ForEach-Object { Write-Host ('  杀软     : {0} (productState={1})' -f $_.displayName, $_.productState) }
+} else {
+    Write-Host '  杀软     : 读不到（可能没有注册任何 AV 产品）'
+}
+$drv = @(Get-CimInstance Win32_SystemDriver -ErrorAction SilentlyContinue |
+        Where-Object { $_.State -eq 'Running' -and $_.Name -match 'klif|klflt|mfe|mca' })
+if ($drv.Count) {
+    $drv | ForEach-Object { Write-Host ('  过滤驱动 : {0}' -f $_.Name) }
+} else {
+    Write-Host '  过滤驱动 : 无'
+}
+Write-Host ''
+
 # ---------- 启动方式：不走 Shell ----------
 # Start-Process 用的是 ShellExecuteEx。Windows Shell 会在启动前做一次"发布者验证"，
 # 遇到未签名 / 带"来自 Internet"标记的文件就弹「打开文件 - 安全警告」。

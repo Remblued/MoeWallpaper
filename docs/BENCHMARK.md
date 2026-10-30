@@ -15,7 +15,22 @@ README 里的"轻量"是可复现的声明，不是形容词。**任何写进 RE
 
 - 同一台机器、同一天、同一构建配置（一律 `release`）。
 - 插电、高性能电源模式，关掉浏览器和构建任务。
-- Defender 实时保护保持默认，但要写进记录（它会显著影响冷启动）。
+- **记录全部安全软件，不是只记 Defender。** 更常见的情况是机器装着第三方杀软，此时
+  Defender 的实时保护会被自动关掉——只写"Defender 实时保护已关闭"会让读者以为这台
+  机器没有防护在干扰，实际恰恰相反。
+
+  ```powershell
+  Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct |
+    Select-Object displayName, productState
+  Get-CimInstance Win32_SystemDriver |
+    Where-Object { $_.State -eq 'Running' -and $_.Name -match 'klif|klflt|mfe|mca' } |
+    Select-Object Name, State
+  ```
+
+  内核过滤驱动（例如卡巴的 `KLIF` / `klflt`）会 hook **每一次进程创建**，直接影响冷启动
+  测量，还可能让未签名的被测程序根本起不来（症状见 §6）。
+- **两个基线必须在同一个防护状态下测。** 一边暂停防护、一边不暂停，比出来的数字没有
+  意义。
 - 每组至少 10 次，报**中位数**；异常值不删，单独写出来。
 - 记录 `git rev-parse --short HEAD` 的 commit hash。
 
@@ -146,6 +161,9 @@ commit      74d4170
 机器        Intel Core i7-14650HX（24 逻辑核）/ 31.6 GB / Windows 11 家庭版 26200.9711
 电源        未固定（读不到活动电源方案，如实记录）
 Defender    实时保护关闭（RealTimeProtectionEnabled = False）
+安全软件    Kaspersky 21.26（服务 AVP21.26；内核驱动 KLIF / klflt 运行中）
+            + McAfee（服务已停止，注册残留）
+            ↑ 事后补记：原记录只写了 Defender，漏了第三方杀软
 构建        npm run tauri build（release, lto=true, strip=true, opt-level=3）
 安装目录    D:\bench\install
 
@@ -233,6 +251,15 @@ locales\*.pak              48.82 MB   （55 个语言包，本项目一个都用
 
 **冷启动和空闲内存这两格仍然是 `TBD`**，原因见 §3.2。
 
+**为什么 2026-10-30 没测到：** 这台机器上的卡巴斯基 21.26 会拦住未签名的打包产物。
+双击被 SmartScreen/应用控制拦一次，点"仍要运行"之后进程在约 60 ms 内以
+`-2147483645`（`STATUS_BREAKPOINT`）退出，stderr 为空、WER 无任何记录。改用
+CreateProcess 启动同样如此，说明不是 Shell 路径的问题。
+
+这是**环境问题，不是基线程序的问题**——第一次打包后窗口是能正常出现的。处理方式是
+把 `bench/` 目录加入杀软排除项（或测量期间暂停防护），然后重测。在重测之前，这两格
+保持 `TBD`；**不接受"大概 3-4 秒"这类估算**。
+
 ### 待办
 
 - [x] Electron 基线的**尺寸**（`bench/electron-baseline/`，已打包测量）
@@ -271,3 +298,4 @@ Defender    默认开启
 | 测内存时进程不见了 | Electron 的 `BrowserWindow` 没被引用，被 GC 后窗口自动关闭，`window-all-closed` 让应用干净退出——**不报错、不留事件日志**，极容易被误判成"程序启动失败" |
 | 冷启动忽快忽慢，慢起来像几秒到十几秒 | 启动命令走 Shell（`Start-Process`）时可能弹「打开文件 - 安全警告」，程序还没创建就在等人点鼠标。改用 `UseShellExecute = $false`（§2.3） |
 | 某个指标每次都不稳定，又说不出规律 | 先怀疑"测量工具污染被测对象"：脚本自己定期跑的东西（枚举进程、轮询磁盘）也会抢 CPU。把诊断性轮询降到 500 ms 级 |
+| 被测程序启动即退，退出码 `-2147483645`（`STATUS_BREAKPOINT`），stderr 为空、WER 也没有记录 | 第三方杀软（如卡巴的 `KLIF` 驱动）拦截或注入未签名的 exe。把项目目录加入排除项，或测量期间暂停防护——**两个基线要在同一防护状态下测**（§1） |

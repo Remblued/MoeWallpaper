@@ -67,3 +67,22 @@ powershell -ExecutionPolicy Bypass -File .\measure.ps1
 
 这个坑和 Electron 无关，**MoeWallpaper 自己也会中**，见
 [`docs/BENCHMARK.md`](../../docs/BENCHMARK.md) §2.3。
+
+## 坑：杀软会在启动的一瞬间杀掉它
+
+症状：双击 exe → SmartScreen 拦一次 → 点"仍要运行"→ **窗口不出来**。用 PowerShell
+启动时进程在 50–100 ms 内退出，`ExitCode = -2147483645`（`0x80000003`，
+`STATUS_BREAKPOINT`），**stderr 为空**，Windows 事件日志和 WER 里**没有任何记录**。
+
+排查顺序（前两条能排掉一大半误判）：
+
+1. 事件日志没有 `Application Error`、WER 没有报告 → 不像普通崩溃；
+2. 但退出码是 breakpoint → 是被"外力"中断的典型形态；
+3. 查安全软件：`Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct`，
+   再看内核驱动 `Get-CimInstance Win32_SystemDriver | ? { $_.State -eq 'Running' -and $_.Name -match 'klif|klflt|mfe' }`。
+
+本机命中项：Kaspersky 21.26 的 `KLIF` + `klflt` 驱动（McAfee 服务已停但注册残留）。
+未签名的 238 MB exe 正是这类产品最爱拦的对象。
+
+处理：把 `bench\` 加进杀软排除项，或测量期间暂停防护。**注意 `docs/BENCHMARK.md` §1
+的要求——两个基线必须在同一防护状态下测。**
