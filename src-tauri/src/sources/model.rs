@@ -32,21 +32,25 @@ pub struct ResponseMapping {
     pub tags: Option<String>,
 }
 
-/// 过滤规则。
+/// 图源的附加过滤。
 ///
-/// 默认值是 `sfwOnly: true`，而且是**故意的**：
-/// 配置里没写这个字段时，必须按最保守的规则处理。
-/// 想改成"默认不过滤"，等于改产品底线，不是改代码风格。
-#[derive(Debug, Deserialize, Serialize)]
+/// **为什么不是 `sfwOnly: true` 这种布尔开关**：
+/// 布尔字段看起来像"安全保护"，但只要没有代码消费它，它就只是一句口号，
+/// 比没有更糟——读配置的人会以为有保护。
+///
+/// 真正能保证安全的是**请求参数**（wallhaven 的 `purity=100`、lolicon 的 `r18=0`），
+/// 所以这里直接存参数，由代码注入。字段因此是被消费的，不是摆设。
+#[derive(Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SourceFilter {
-    pub sfw_only: bool,
-}
-
-impl Default for SourceFilter {
-    fn default() -> Self {
-        Self { sfw_only: true }
-    }
+    /// 发请求时由代码拼到地址末尾的安全参数，例如 `purity=100`、`r18=0`。
+    ///
+    /// 只写裸参数，不要带 `?` 或 `&`——由代码判断用哪个连接。
+    /// 需要参数限制的图源必须写；本身只提供安全内容的图源留空。
+    ///
+    /// 写在这里而不是直接塞进 `request.url`，是为了让"安全"这件事在配置里
+    /// 一眼可见，而且加图源的人不会忘。
+    pub sfw_query: Option<String>,
 }
 
 /// 单个图源。

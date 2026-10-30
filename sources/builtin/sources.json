@@ -7,7 +7,7 @@
       "enabled": true,
       "homepage": "https://wallhaven.cc/",
       "request": {
-        "url": "https://wallhaven.cc/api/v1/search?categories=010&purity=100&sorting=random&page={page}",
+        "url": "https://wallhaven.cc/api/v1/search?categories=010&sorting=random&page={page}",
         "method": "GET",
         "headers": {
           "Accept": "application/json"
@@ -20,7 +20,7 @@
         "pageUrl": "url"
       },
       "filter": {
-        "sfwOnly": true
+        "sfwQuery": "purity=100"
       }
     },
     {
@@ -39,9 +39,6 @@
         "itemsPath": "results",
         "imageUrl": "url",
         "pageUrl": "source_url"
-      },
-      "filter": {
-        "sfwOnly": true
       }
     },
     {
@@ -50,7 +47,7 @@
       "enabled": true,
       "homepage": "https://api.lolicon.app/",
       "request": {
-        "url": "https://api.lolicon.app/setu/v2?num={limit}&r18=0&p={page}",
+        "url": "https://api.lolicon.app/setu/v2?num={limit}&p={page}",
         "method": "GET",
         "headers": {
           "Accept": "application/json"
@@ -61,7 +58,7 @@
         "imageUrl": "urls.original"
       },
       "filter": {
-        "sfwOnly": true
+        "sfwQuery": "r18=0"
       }
     }
   ]

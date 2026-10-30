@@ -1,7 +1,7 @@
 //! 按图源配置发一次 HTTP 请求，把图片列表拿回来。
 
 use crate::sources::extract::ImageRef;
-use crate::sources::model::WallpaperSource;
+use crate::sources::model::{SourceFilter, WallpaperSource};
 
 /// 一次请求要几张图。
 ///
@@ -38,13 +38,37 @@ pub fn substitute_placeholders(url: &str, page: u32, limit: u32) -> String {
         .replace("{limit}", &limit.to_string())
 }
 
+/// 把图源声明的安全参数拼到地址末尾。
+///
+/// 配置里 `sfwQuery` 写的是 `purity=100` 这样的裸参数，不带问号。
+/// 这里负责判断该用 `?` 还是 `&`——让写配置的人少操一件心。
+///
+/// 没配就不动地址。**这意味着"忘配 = 没有保护"**，
+/// 所以内置图源到底配了什么，是 review 的必查项，不是可选项。
+fn apply_sfw_query(url: &str, filter: &SourceFilter) -> String {
+    let Some(query) = filter.sfw_query.as_deref() else {
+        return url.to_string();
+    };
+
+    if query.is_empty() {
+        return url.to_string();
+    }
+
+    let separator = if url.contains('?') { '&' } else { '?' };
+
+    format!("{url}{separator}{query}")
+}
+
 /// 从指定图源拉一页图片。
 pub async fn fetch_source_images(
     source: &WallpaperSource,
     page: u32,
 ) -> Result<Vec<ImageRef>, String> {
-    // 拼地址
-    let url = substitute_placeholders(&source.request.url, page, DEFAULT_LIMIT);
+    // 拼地址：先替换占位符，再注入图源声明的安全参数
+    let url = apply_sfw_query(
+        &substitute_placeholders(&source.request.url, page, DEFAULT_LIMIT),
+        &source.filter,
+    );
 
     // 只放行 GET；没配 method 视为默认 GET
     if let Some(m) = &source.request.method
@@ -102,6 +126,49 @@ mod tests {
     fn substitutes_repeated_placeholder() {
         let url = substitute_placeholders("https://a.com/{page}/{page}", 7, 20);
         assert_eq!(url, "https://a.com/7/7");
+    }
+
+    fn filter(query: Option<&str>) -> SourceFilter {
+        SourceFilter {
+            sfw_query: query.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn sfw_query_appends_with_ampersand() {
+        let url = apply_sfw_query("https://a.com/s?page=1", &filter(Some("purity=100")));
+        assert_eq!(url, "https://a.com/s?page=1&purity=100");
+    }
+
+    #[test]
+    fn sfw_query_starts_the_query_string() {
+        let url = apply_sfw_query("https://a.com/s", &filter(Some("r18=0")));
+        assert_eq!(url, "https://a.com/s?r18=0");
+    }
+
+    #[test]
+    fn sfw_query_absent_leaves_url_alone() {
+        let original = "https://a.com/s?page=1";
+        assert_eq!(apply_sfw_query(original, &filter(None)), original);
+        assert_eq!(apply_sfw_query(original, &filter(Some(""))), original);
+    }
+
+    /// 安全参数必须真的进到最终请求地址里——这条是那个卖点唯一的自动化保障。
+    #[test]
+    fn sfw_query_is_applied_to_the_real_source_config() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "wallhaven")
+            .expect("内置图源里应该有 wallhaven");
+
+        let url = apply_sfw_query(&source.request.url, &source.filter);
+
+        assert!(
+            url.contains("purity=100"),
+            "wallhaven 必须带上 purity=100，实际地址是 {url}"
+        );
     }
 
     /// A1 的验收标准。

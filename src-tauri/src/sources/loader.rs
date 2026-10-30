@@ -63,18 +63,4 @@ mod tests {
 
         assert_eq!(ids.len(), total, "有重复的图源 id");
     }
-
-    /// SFW 是这个项目的底线，内置图源一个都不能是 enabled + 可能不安全的组合。
-    #[test]
-    fn builtin_sources_are_all_declared_sfw() {
-        let file = load_builtin().unwrap();
-
-        for source in &file.sources {
-            assert!(
-                source.filter.sfw_only,
-                "内置图源 {} 没有声明 sfwOnly",
-                source.id
-            );
-        }
-    }
 }

@@ -47,7 +47,7 @@
 | 真实图源 | wallhaven / nekos.best / lolicon，全部免费、无需 API key | `sources/builtin/sources.json` |
 | 前端 | 图源下拉、缩略图网格、四态、toast | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
 
-**测试：41 个（40 个自动跑，1 个标记 `#[ignore]` 手动跑——它会真的改桌面）。`cargo clippy -D warnings` 零告警。**
+**测试：44 个（43 个自动跑，1 个标记 `#[ignore]` 手动跑——它会真的改桌面）。`cargo clippy -D warnings` 零告警。**
 
 ### 未做（这就是接下来的活）
 
@@ -189,6 +189,22 @@ interface ImageDto {
 
 **这是通用原则：能在一处规整好的数据，不要留成"每个使用者都要处理"的形状。**
 
+### SFW 是怎么保证的（卖点之一，别弄丢）
+
+**不是靠一个 `sfwOnly: true` 的布尔开关**——那种字段只要没有代码消费它，就是口号。
+
+真正的机制是 `filter.sfwQuery`：配置里写裸参数（`purity=100`、`r18=0`），
+`fetch.rs::apply_sfw_query` 在发请求前拼到地址末尾。
+
+| 图源 | 安全来自哪 |
+|---|---|
+| wallhaven | `sfwQuery: "purity=100"` |
+| lolicon | `sfwQuery: "r18=0"` |
+| nekos.best | API 本身只提供安全内容，不配 |
+
+**所以配图源时的规矩是：只要那个 API 有 NSFW 参数，`sfwQuery` 就必须写。**
+写了才受保护，忘了就没有——这一点只能靠 review 挡，测试挡不住。
+
 ---
 
 ## 5. 我们定的十条规矩
@@ -284,7 +300,7 @@ interface ImageDto {
 |---|---|---|
 | **缓存会记住错误**：下载到一张 HTML 错误页，也会被永久当成"这张图"，不会自愈 | `wallpaper/download.rs` | 加「清空缓存」按钮；临时解法：删掉 `%LOCALAPPDATA%\com.remblued.moewallpaper` |
 | `current.jpg` 里可能装着 PNG 数据，靠 Windows 按内容识别格式 | `wallpaper/current.rs` | 如果哪天换壁纸失效，**优先怀疑这里** |
-| **`filter.sfwOnly` 没有任何代码在消费它**——它是"声明"，不是"保护"。真正的 SFW 来自各图源的 URL 参数（`purity=100`、`r18=0`） | `sources/model.rs` | 要么删掉这个字段，要么改成由代码注入安全参数（见 §7 末） |
+| 安全参数靠"记得配"——图源没写 `sfwQuery` 就没有任何内容限制，而这一点只有 code review 能保证 | `sources/builtin/sources.json` | 做用户自定义图源时，在加载阶段强制校验：要么配 `sfwQuery`，要么显式标记"API 本身只提供安全内容" |
 | 国内免费接口几乎都是"单图 302 / 直接返回一张图"，不是列表；本项目 schema 只吃列表 | `sources/model.rs` | 要支持单图源，得加一种 source 类型（v0.4 插件化时一起做） |
 | 360 壁纸有动漫分类（`cid=26`），但**不是公开 API**，条款不明，而且 `start` 是偏移量不是页码 | — | 用户要国内源时再单独评估，别默认塞进去 |
 | nekos.best 和 lolicon 不提供缩略图，网格会直接加载原图（一张 2–4MB） | `sources/builtin/sources.json` | 要么限制每页数量，要么后端生成缩略图 |
