@@ -333,10 +333,21 @@ function renderError(err: unknown) {
 function renderGrid(images: ImageDto[], totalOnPage = images.length) {
   const pageText = currentPage > 1 ? `第 ${currentPage} 页 · ` : "";
   const hidden = totalOnPage - images.length;
-  statusEl.textContent =
-    hidden > 0
-      ? `${pageText}共 ${images.length} 张（按分辨率筛掉 ${hidden} 张）`
-      : `${pageText}共 ${images.length} 张图片`;
+
+  if (hidden > 0 && images.length === 0) {
+    // 整页被筛空有两种完全不同的原因，说法必须分开：
+    // 图源不报尺寸（如 nekos.best）时筛选对它根本无效，说"没有够大的图"是误导。
+    const unknown = lastImages.filter((img) => !img.width || !img.height).length;
+    statusEl.textContent =
+      unknown === totalOnPage
+        ? `${pageText}这个图源不提供图片尺寸，无法按分辨率筛选（本页 ${totalOnPage} 张）`
+        : `${pageText}本页没有达到该分辨率的图片（共 ${totalOnPage} 张）`;
+  } else {
+    statusEl.textContent =
+      hidden > 0
+        ? `${pageText}共 ${images.length} 张（按分辨率筛掉 ${hidden} 张）`
+        : `${pageText}共 ${images.length} 张图片`;
+  }
   statusEl.className = "status";
 
   gridEl.innerHTML = images
