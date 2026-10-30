@@ -28,5 +28,24 @@ npx electron-builder --win nsis
 `connect ETIMEDOUT 20.205.243.166:443` 和 `The server aborted pending request`，
 说明工具链下载（electron 压缩包 + NSIS + 7zip）对**链路稳定性**很敏感，重试是有效手段。
 
-**冷启动和空闲内存仍是 `TBD`**：这两项要求启动 GUI 进程，需要在正常的桌面会话里
-人工跑 `docs/BENCHMARK.md` §3.2。
+**冷启动和空闲内存仍是 `TBD`**：这两项要求启动 GUI 进程，需要在正常的桌面会话里跑
+`measure.ps1`（口径见 `docs/BENCHMARK.md` §2.3 / §2.4）：
+
+```powershell
+cd bench\electron-baseline
+npx electron-builder --win nsis      # 改过 main.js 就必须重打包
+powershell -ExecutionPolicy Bypass -File .\measure.ps1
+```
+
+## 坑：窗口会自己消失
+
+`main.js` 最初写成 `new BrowserWindow(...)`，不保存返回值。Electron 里
+`BrowserWindow` 的 JS 包装对象一旦被 V8 回收，**原生窗口会被自动关闭**，接着
+`window-all-closed` 触发 `app.quit()`——应用在启动几十秒后安静地退出。
+
+它的杀伤力在于**伪装成别的问题**：没有错误弹窗、没有崩溃事件、ExitCode 是 0。
+第一次测内存时表现为"启动 60 秒后 `Get-Process` 查不到进程"，很容易被误判成
+程序没起来或者机器有问题。
+
+修法就是留一个模块级引用（现在的写法）。`measure.ps1` 因此把"进程是否还活着"
+做成硬检查：测不到就报错，不返回数字。

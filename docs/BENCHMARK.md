@@ -104,11 +104,17 @@ electron-builder 的 NSIS 安装器就是把这 73 个文件原样铺到安装�
   Measure-Object Length -Sum).Sum
 ```
 
-### 3.2 冷启动和内存还没测
+### 3.2 冷启动和空闲内存
 
-这两项需要在**能正常启动 GUI 进程的桌面会话**里跑 2.3 / 2.4 的命令，命令本身通用：
-把 `$exe` 换成 `dist\win-unpacked\BaselineElectron.exe`，进程名换成
-`BaselineElectron`。没跑过之前，README 里这两格保持 `TBD`。
+跑 `bench/electron-baseline/measure.ps1`（普通桌面会话，它会启动 GUI 程序）：
+
+```powershell
+cd bench\electron-baseline
+powershell -ExecutionPolicy Bypass -File .\measure.ps1
+```
+
+脚本按 2.3 / 2.4 的口径测，并且在**窗口没出现**或**进程提前退出**时报错，而不是给出
+一个数字。测不到就不许填，这一条比"把表填满"重要。
 
 ## 4. 对比纪律
 
@@ -244,3 +250,4 @@ Defender    默认开启
 | 首次启动特别慢 | Defender 首次扫描 / 磁盘冷读。**标注出来单独报告，不要静默剔除**（§0 第 5 条）；想要干净的中位数就测 11 次，把首发单独写 |
 | 安装包特别大 | 用 dev 构建测的，或者没开 `[profile.release]` 的 lto/strip |
 | 数字每次都不一样 | 没固定电源模式 / 没关后台任务；先固定条件再谈精度 |
+| 测内存时进程不见了 | Electron 的 `BrowserWindow` 没被引用，被 GC 后窗口自动关闭，`window-all-closed` 让应用干净退出——**不报错、不留事件日志**，极容易被误判成"程序启动失败" |
