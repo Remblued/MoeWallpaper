@@ -202,6 +202,9 @@ async function handleSetWallpaper() {
     }
   } catch (err) {
     showToast(`❌ 设置失败：${String(err)}`, true);
+  } finally {
+    // 成功也要恢复：不恢复的话按钮会永远停在"设置中…"的禁用态，
+    // 用户想再设一次只能先关掉详情页再打开，看起来像卡死。
     detailBtnSet.disabled = false;
     detailBtnSet.textContent = "设为壁纸";
   }
