@@ -16,8 +16,8 @@ app whose main job is "show a grid of images and set one as the wallpaper".
 MoeWallpaper makes one bet — a wallpaper app does not need a full browser runtime
 bundled per app — and three commitments to go with it:
 
-1. **Small install.** Target: a **5–10 MB** installer. Measured on real builds, not
-   estimated. See [Size, measured not claimed](#size-measured-not-claimed).
+1. **Small install.** Measured at **1.69 MB**, not estimated. See
+   [Size, measured not claimed](#size-measured-not-claimed).
 2. **Sources are data, not code.** Adding an image source means editing a JSON file.
    There is no plugin runtime, no scripting layer, no per-source native module.
 3. **No bundled images.** This repository contains no wallpaper files. Sources point
@@ -31,10 +31,27 @@ until someone can reproduce it. The method lives in [docs/BENCHMARK.md](docs/BEN
 
 | Metric | MoeWallpaper | Minimal Electron app | How it is measured |
 | --- | --- | --- | --- |
-| Installer size (`.exe`) | TBD | TBD | file size of the installer produced by the build |
-| Installed size on disk | TBD | TBD | sum of all files under the install directory |
-| Cold start to visible window | TBD | TBD | median of 10 launches, from `Start-Process` to first window |
+| Installer size (`.exe`) | **1.69 MB** | TBD | file size of the installer produced by the build |
+| Installed size on disk | **5.19 MB** | TBD | sum of all files under the install directory |
+| Cold start to visible window | **41 ms** (median) | TBD | median of 10 launches, from `Start-Process` to first window |
 | Idle memory (60 s after launch) | TBD | TBD | all app + webview processes, not just the main one |
+
+Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
+Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
+(LTO + strip) / commit `74d4170`.
+
+**Two caveats that belong with these numbers:**
+
+- **The installer does not include the WebView2 runtime.** Windows 11 ships it;
+  Windows 10 downloads roughly 100 MB on first install. So this is not
+  "1.69 MB everywhere".
+- **Cold start is *window appears*, not *page rendered*.** The latter is a few
+  hundred milliseconds later.
+
+Idle memory and the Electron baseline are still `TBD`: during the first measurement
+the network dropped and the UI sat in its loading state, so the number did not
+describe real use. **Left blank on purpose — a number I do not trust is worse than
+no number.**
 
 Two rules keep this honest:
 

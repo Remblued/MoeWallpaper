@@ -100,7 +100,58 @@ npx electron-builder --win nsis
 - 不对"最小 Electron 应用"以外的对象下结论。
 - 如果 MoeWallpaper 某个指标反而不如基线，写出来，不要删。
 
-## 5. 记录模板
+## 5. 记录
+
+### 第一次测量 · 2026-10-30
+
+```text
+日期        2026-10-30
+commit      74d4170
+机器        Intel Core i7-14650HX（24 逻辑核）/ 31.6 GB / Windows 11 家庭版 26200.9711
+电源        未固定（读不到活动电源方案，如实记录）
+Defender    实时保护关闭（RealTimeProtectionEnabled = False）
+构建        npm run tauri build（release, lto=true, strip=true, opt-level=3）
+安装目录    D:\bench\install
+
+               MoeWallpaper    Electron 基线
+安装包         1.69 MB         TBD
+安装后         5.19 MB         TBD
+冷启动(中位)    41 ms           TBD
+空闲内存        TBD             TBD
+```
+
+**安装包** 1,773,651 字节。**安装后** 5,443,478 字节（`moe-wallpaper.exe`
+5,238.5 KB + `uninstall.exe` 77.4 KB），不含 WebView2 运行时——
+`tauri.conf.json` 没配 `webviewInstallMode`，走默认的 `downloadBootstrapper`，
+即 WebView2 由安装器在目标机器上按需下载。
+
+**冷启动 10 次原始值（ms）**：
+
+```text
+200, 54, 45, 37, 33, 46, 37, 29, 49, 33
+min=29  median=41  max=200
+```
+
+首次 200 ms 含磁盘冷读，按要求**没有剔除**（§0 第 5 条：异常值不删，单独写出来）。
+
+**空闲内存为什么还是 TBD**：第一次测量时本机网络中断，wallhaven 拉不到图，
+界面停在下图这个状态——网格全是骨架屏，`加载中…` 一直没变成错误态。
+此时内存里没有图片数据，测出来的数**不代表真实使用**。
+
+三次采样（工作集 / 私有）：396.5 MB / 243.4 MB、369 MB / 228.5 MB、
+364.9 MB / 196.0 MB。三个数互相矛盾，且有一次中途出现 2.4 GB 峰值后自行回落，
+**不可复现，因此不采用**。
+
+重测条件：网络恢复 → 确认网格出图 → 静置 60 秒 → 至少 3 次取中位数，
+每个进程单独列出来。工作集直接相加会重复计算共享 DLL，**要同时报私有内存**。
+
+### 待办
+
+- [ ] Electron 基线（`bench/electron-baseline/`，需要下载几百 MB）
+- [ ] 空闲内存重测
+- [ ] 空闲内存换成"私有内存"作主口径，工作集作为参考并注明重复计算
+
+### 记录模板
 
 把测完的结果记在这里，README 的表格从这份数据抄过去。
 
