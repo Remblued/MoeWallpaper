@@ -543,3 +543,55 @@ body.detail-open {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ── 玻璃主题 ─────────────────────────────────────────────── */
+
+/* 底色铺三层径向渐变：模糊需要"有东西可模糊"，纯色底上做毛玻璃什么也看不出来。 */
+:root[data-theme="glass"] {
+  --bg: #0d1120;
+  --fg: #eef2f8;
+  --card-bg: rgba(255, 255, 255, 0.07);
+  --card-border: rgba(255, 255, 255, 0.16);
+  --accent: #8ab4ff;
+  --accent-hover: #a9c8ff;
+  --error: #ff8a8a;
+  --toast-bg: rgba(18, 24, 38, 0.88);
+  --toast-fg: #eef2f8;
+}
+
+:root[data-theme="glass"] body {
+  background:
+    radial-gradient(120% 90% at 12% 0%, #2b3a5c 0%, transparent 58%),
+    radial-gradient(100% 80% at 88% 8%, #4a2b52 0%, transparent 52%),
+    radial-gradient(90% 70% at 50% 100%, #1b3a3a 0%, transparent 60%),
+    #0d1120;
+  background-attachment: fixed;
+}
+
+/* 毛玻璃面。注意这是**窗口内**的模糊（backdrop-filter），
+   不是把桌面透上来——后者要开窗口透明 + DWM Mica，是另一次改动。 */
+:root[data-theme="glass"] .toolbar,
+:root[data-theme="glass"] .card,
+:root[data-theme="glass"] .pager-btn,
+:root[data-theme="glass"] .icon-btn,
+:root[data-theme="glass"] .toast {
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+:root[data-theme="glass"] .card:hover {
+  border-color: var(--accent);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* 详情页遮罩也在玻璃主题下加一层模糊，否则背后内容太抢眼 */
+:root[data-theme="glass"] .detail-backdrop {
+  background: rgba(6, 10, 18, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}

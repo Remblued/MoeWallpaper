@@ -76,9 +76,44 @@ pub fn substitute_placeholders(url: &str, page: u32, limit: u32) -> String {
     // 让配置写 `{offset}`、由代码算，配置本身就不用做算术。
     let offset = page.saturating_sub(1).saturating_mul(limit);
 
+    substitute_with_offset(url, page, limit, offset)
+}
+
+/// 同上，但偏移量由调用方给。
+///
+/// 分开的理由：顺序固定的图源要的是**随机**偏移量（见 `SourceFilter::random_offset_max`），
+/// 而随机值不能藏在"替换函数"里——那样这个函数就没法测了。
+fn substitute_with_offset(url: &str, page: u32, limit: u32, offset: u32) -> String {
     url.replace("{page}", &page.to_string())
         .replace("{limit}", &limit.to_string())
         .replace("{offset}", &offset.to_string())
+}
+
+/// 在 `[0, max_start)` 里挑一个 `limit` 的倍数。
+///
+/// 纯函数，只吃种子，所以能测：随机的东西不好测，但"随机值必须合法"很好测。
+fn random_start_from(seed: u64, max_start: u32, limit: u32) -> u32 {
+    if limit == 0 || max_start < limit {
+        return 0;
+    }
+    let slots = max_start / limit;
+    ((seed % slots as u64) as u32) * limit
+}
+
+/// 取一个伪随机数。
+///
+/// 不为"换一批"这一个功能引入 `rand` 依赖：`RandomState` 的种子来自操作系统熵，
+/// 再掺一个自增计数器，连续调用也不会拿到同一个值。
+fn random_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u64(n);
+    hasher.finish()
 }
 
 /// 把图源声明的安全参数拼到地址末尾。
@@ -120,12 +155,19 @@ fn build_request_url(
 ) -> Result<reqwest::Url, String> {
     let keyword = query.map(str::trim).filter(|q| !q.is_empty());
 
+    // 顺序固定的图源要随机起点，否则"第 1 页"永远是那 20 张。
+    let offset = match source.filter.random_offset_max {
+        Some(max) => random_start_from(random_u64(), max, DEFAULT_LIMIT),
+        None => page.saturating_sub(1).saturating_mul(DEFAULT_LIMIT),
+    };
+
     let raw = match (keyword, &source.search) {
         (Some(kw), Some(spec)) => {
             let mapped = search::to_source_query(kw, spec.english);
-            substitute_placeholders(&spec.url, page, DEFAULT_LIMIT).replace("{query}", &mapped)
+            substitute_with_offset(&spec.url, page, DEFAULT_LIMIT, offset)
+                .replace("{query}", &mapped)
         }
-        _ => substitute_placeholders(&source.request.url, page, DEFAULT_LIMIT),
+        _ => substitute_with_offset(&source.request.url, page, DEFAULT_LIMIT, offset),
     };
 
     let raw = apply_sfw_query(&raw, &source.filter);
@@ -239,6 +281,7 @@ mod tests {
         SourceFilter {
             sfw_query: query.map(str::to_string),
             https_upgrade: false,
+            random_offset_max: None,
         }
     }
 
@@ -470,6 +513,18 @@ mod tests {
             images.iter().any(|i| i.width.is_some()),
             "resolution 字段应该被拆成宽高"
         );
+
+        // 连拉三次，第一张不能都是同一张——否则"随机"是假的
+        let mut firsts = std::collections::HashSet::new();
+        firsts.insert(images[0].image_url.clone());
+        for _ in 0..2 {
+            let again = fetch_source_images(src, 1, None).await.unwrap();
+            firsts.insert(again[0].image_url.clone());
+        }
+        assert!(
+            firsts.len() > 1,
+            "三次请求拿到同一张图，随机起点没生效：{firsts:?}"
+        );
     }
 
     #[test]
@@ -484,6 +539,30 @@ mod tests {
         // page=0 是非法的，但也不能因为 u32 下溢而崩
         let url = substitute_placeholders("https://a.com/p?start={offset}", 0, 20);
         assert!(url.contains("start=0"), "{url}");
+    }
+
+    #[test]
+    fn random_start_is_a_valid_multiple_of_limit() {
+        for seed in 0..200u64 {
+            let start = random_start_from(seed, 8000, 20);
+            assert_eq!(start % 20, 0, "起点必须是 limit 的倍数：{start}");
+            assert!(start < 8000, "起点必须在上限内：{start}");
+        }
+    }
+
+    #[test]
+    fn random_start_covers_many_pages() {
+        // 只有几个取值就等于没随机
+        let picks: std::collections::HashSet<u32> =
+            (0..50u64).map(|s| random_start_from(s, 8000, 20)).collect();
+        assert!(picks.len() > 5, "随机起点太集中：{picks:?}");
+    }
+
+    #[test]
+    fn degenerate_random_bounds_do_not_panic() {
+        assert_eq!(random_start_from(123, 0, 20), 0);
+        assert_eq!(random_start_from(123, 19, 20), 0);
+        assert_eq!(random_start_from(123, 8000, 0), 0);
     }
 
     #[test]

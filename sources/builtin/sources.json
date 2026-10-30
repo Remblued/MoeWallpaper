@@ -21,7 +21,8 @@
         "tags": "utag"
       },
       "filter": {
-        "httpsUpgrade": true
+        "httpsUpgrade": true,
+        "randomOffsetMax": 8000
       }
     },
     {

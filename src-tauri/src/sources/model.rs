@@ -72,6 +72,15 @@ pub struct SourceFilter {
     /// 只作用于图片和缩略图；页面链接不改，它是要交给浏览器打开的。
     #[serde(default)]
     pub https_upgrade: bool,
+    /// 把 `{offset}` 换成**随机起点**，用于"顺序固定、但支持偏移量"的图源。
+    ///
+    /// 360 壁纸就是这样：第 1 页永远是那 20 张，翻到第 2 页也是固定的。
+    /// 配上这个值后，每次请求从 `[0, random_offset_max)` 里随机取一个 `limit` 的倍数，
+    /// 于是"翻页"变成"换一批"——效果对齐 wallhaven 的 `sorting=random`。
+    ///
+    /// 填"想覆盖的总量"：接口 `total` 是 10000、每页 20，就填 8000。
+    #[serde(default)]
+    pub random_offset_max: Option<u32>,
 }
 
 /// 搜索能力。

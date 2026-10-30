@@ -109,7 +109,7 @@ Two rules keep this honest:
 | Keyword search (Chinese tag dictionary, per-source search endpoints) | ✅ |
 | Pagination | ✅ |
 | Resolution filter (≥1080p / ≥1440p / ≥4K) | ✅ |
-| Dark / light theme, remembered | ✅ |
+| Dark / light / glass themes, remembered | ✅ |
 | One-click wallpaper (Win32 `SystemParametersInfo`) | ✅ |
 | Save to Pictures without overwriting | ✅ |
 | Local cache (thumbnails, current wallpaper) | ✅ |

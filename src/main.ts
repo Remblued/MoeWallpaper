@@ -72,15 +72,34 @@ function showToast(msg: string, isError = false) {
 
 // ── 主题 ────────────────────────────────────────────────────
 
-type Theme = "light" | "dark";
+type Theme = "light" | "dark" | "glass";
 
 const THEME_KEY = "moewallpaper.theme";
+
+/** 点击顺序。玻璃排在最后：它是锦上添花，不该挡住浅色/深色的切换。 */
+const THEMES: Theme[] = ["light", "dark", "glass"];
+
+/**
+ * 图标显示的是**当前**主题，不是下一个。
+ *
+ * 两个主题时显示"目标"还算直观，三个就会让人猜不透点下去会变成什么。
+ * 名字放在 title 里，鼠标一悬停就知道现在是什么。
+ */
+const THEME_META: Record<Theme, { icon: string; name: string }> = {
+  light: { icon: "☀️", name: "浅色" },
+  dark: { icon: "🌙", name: "深色" },
+  glass: { icon: "🫧", name: "玻璃" },
+};
+
+function isTheme(value: string | null | undefined): value is Theme {
+  return value === "light" || value === "dark" || value === "glass";
+}
 
 /** 读写 localStorage 都包一层：存储被禁时不该让整个界面崩掉。 */
 function loadStoredTheme(): Theme | null {
   try {
     const value = localStorage.getItem(THEME_KEY);
-    return value === "light" || value === "dark" ? value : null;
+    return isTheme(value) ? value : null;
   } catch {
     return null;
   }
@@ -100,9 +119,9 @@ function systemTheme(): Theme {
 
 function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme;
-  // 显示的是"点下去会切到哪"，不是当前状态。反着放用户每次都要先点错一次。
-  themeBtn.textContent = theme === "dark" ? "☀️" : "🌙";
-  const label = theme === "dark" ? "切换到浅色主题" : "切换到深色主题";
+  const meta = THEME_META[theme];
+  themeBtn.textContent = meta.icon;
+  const label = `当前：${meta.name}主题，点击切换`;
   themeBtn.title = label;
   themeBtn.setAttribute("aria-label", label);
 }
@@ -113,7 +132,9 @@ function initTheme() {
   applyTheme(loadStoredTheme() ?? systemTheme());
 
   themeBtn.onclick = () => {
-    const next: Theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    const current = document.documentElement.dataset.theme;
+    const index = isTheme(current) ? THEMES.indexOf(current) : 0;
+    const next = THEMES[(index + 1) % THEMES.length] ?? "light";
     applyTheme(next);
     storeTheme(next);
   };

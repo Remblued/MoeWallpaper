@@ -124,6 +124,9 @@ http://wallpaper.apc.360.cn/index.php
 - `{offset}` 占位符：`start=(page-1)*limit`，配置里不用做算术
 - `resolution` 字段：把 `"2560x1440"` 拆成宽高；同时配了 `width`/`height` 时以那两个为准
 - `filter.httpsUpgrade`：把图片地址的 `http://` 换成 `https://`，否则 WebView 不会加载
+- `filter.randomOffsetMax`：把 `{offset}` 换成**随机起点**。360 的列表是固定顺序，
+  第 1 页永远是那 20 张；配 `8000` 后每次从 `[0,8000)` 里随机取 20 的倍数，
+  "翻页"就变成了"换一批"，效果对齐 wallhaven 的 `sorting=random`
 
 落地时配的测试：
 
