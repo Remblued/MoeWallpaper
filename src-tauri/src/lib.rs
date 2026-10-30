@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod fs;
+pub mod net;
 pub mod sources;
 pub mod wallpaper;
 

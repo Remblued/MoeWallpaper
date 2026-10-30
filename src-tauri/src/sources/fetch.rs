@@ -19,15 +19,52 @@ pub const DEFAULT_LIMIT: u32 = 20;
 pub(crate) fn client() -> &'static reqwest::Client {
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
 
-    CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            // 有些图源会拒绝没有 User-Agent 的请求（当成爬虫）
-            .user_agent(concat!("MoeWallpaper/", env!("CARGO_PKG_VERSION")))
-            // 不设超时 = 网络卡住时界面永远转圈。20 秒足够慢网加载一页。
-            .timeout(std::time::Duration::from_secs(20))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    })
+    CLIENT.get_or_init(|| build_client(true))
+}
+
+/// 不走代理的备用客户端。
+///
+/// 系统里 `ProxyEnable = 1` 但代理软件已经退出，是很常见的情况（关了 Clash 却忘了
+/// 取消系统代理）。这时每个请求都会先撞代理超时，用户看到的是"图源全挂了"。
+/// 所以代理请求失败后要能用直连再试一次，而不是直接把错误甩给用户。
+fn direct_client() -> &'static reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+
+    CLIENT.get_or_init(|| build_client(false))
+}
+
+fn build_client(use_proxy: bool) -> reqwest::Client {
+    let mut builder = reqwest::Client::builder()
+        // 有些图源会拒绝没有 User-Agent 的请求（当成爬虫）
+        .user_agent(concat!("MoeWallpaper/", env!("CARGO_PKG_VERSION")))
+        // 连接超时单独设短一点：代理没开时能更快失败，早点切到直连
+        .connect_timeout(std::time::Duration::from_secs(10))
+        // 整体超时：不设的话网络卡住时界面永远转圈。
+        // 30 秒是给"慢网下一张 4K 原图"留的余量。
+        .timeout(std::time::Duration::from_secs(30));
+
+    // 只有 reqwest 不读系统代理，这一步补上它的短板：见 `crate::net` 的模块注释。
+    if use_proxy
+        && let Some(proxy) = crate::net::system_proxy()
+        && let Ok(parsed) = reqwest::Proxy::all(&proxy)
+    {
+        builder = builder.proxy(parsed);
+    }
+
+    builder.build().unwrap_or_else(|_| reqwest::Client::new())
+}
+
+/// 建一个 GET 请求并带上图源配置里的请求头。
+fn build_request(
+    client: &reqwest::Client,
+    source: &WallpaperSource,
+    url: &reqwest::Url,
+) -> reqwest::RequestBuilder {
+    let mut req = client.get(url.clone());
+    for (k, v) in &source.request.headers {
+        req = req.header(k, v);
+    }
+    req
 }
 
 /// 把配置里写的 `{page}` / `{limit}` 换成真实数字。
@@ -108,22 +145,35 @@ pub async fn fetch_source_images(
         return Err(format!("图源 {} 暂不支持 {} 方法", url, m));
     }
 
-    // 建请求 + 请求头
-    let mut req = client().get(url.clone());
-    for (k, v) in &source.request.headers {
-        req = req.header(k, v);
-    }
-
-    // 发出去
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("请求 {} 失败: {}", url, e))?;
+    // 发出去：先按系统代理，连接不通就直连再试一次
+    let resp = match build_request(client(), source, &url).send().await {
+        Ok(resp) => resp,
+        Err(proxy_err) => {
+            if crate::net::system_proxy().is_some() {
+                build_request(direct_client(), source, &url)
+                    .send()
+                    .await
+                    .map_err(|direct_err| {
+                        format!(
+                            "请求 {} 失败（代理和直连都没通）\n  走代理: {}\n  直连: {}",
+                            url, proxy_err, direct_err
+                        )
+                    })?
+            } else {
+                return Err(format!("请求 {} 失败: {}", url, proxy_err));
+            }
+        }
+    };
 
     // 查状态码
     let status = resp.status();
     if !status.is_success() {
-        return Err(format!("请求 {} 返回状态码 {}", url, status));
+        // 带上响应体开头：403 可能是图源的频率限制，也可能是校园网/安全软件的拦截页，
+        // 两者正文完全不同。只报状态码等于让用户猜。
+        let body = resp.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(200).collect();
+        let snippet = snippet.replace(['\r', '\n'], " ");
+        return Err(format!("请求 {} 返回 {} — {}", url, status, snippet.trim()));
     }
 
     // 读 JSON
@@ -334,5 +384,22 @@ mod tests {
         let message = build_request_url(&test_source("不是个地址"), 1, None).unwrap_err();
 
         assert!(message.contains("test"), "错误里要带图源 id：{message}");
+    }
+
+    /// 手动跑：`cargo test -- --ignored --nocapture live_request`
+    ///
+    /// 验证的是"真的能联网"这件事，结果取决于这台机器的网络和代理设置，
+    /// 所以不能进自动测试。它覆盖的是 `client()` 有没有正确套上系统代理——
+    /// 这一段纯函数测不出来。
+    #[tokio::test]
+    #[ignore]
+    async fn live_request_reaches_a_real_host() {
+        let url = reqwest::Url::parse("https://api.lolicon.app/setu/v2?num=1&p=1&r18=0").unwrap();
+        println!("系统代理 = {:?}", crate::net::system_proxy());
+
+        match client().get(url).send().await {
+            Ok(resp) => println!("状态码 = {}", resp.status()),
+            Err(e) => println!("请求失败 = {e}"),
+        }
     }
 }
