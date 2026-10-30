@@ -19,6 +19,8 @@ const toastEl      = document.getElementById("toast") as HTMLDivElement;
 const prevBtn      = document.getElementById("prev-page") as HTMLButtonElement;
 const nextBtn      = document.getElementById("next-page") as HTMLButtonElement;
 const pageLabel    = document.getElementById("page-label") as HTMLSpanElement;
+const resSelect    = document.getElementById("res-select") as HTMLSelectElement;
+const themeBtn     = document.getElementById("theme-toggle") as HTMLButtonElement;
 
 // ── 状态 ────────────────────────────────────────────────────
 let currentSourceId = "";
@@ -28,6 +30,20 @@ let lastImages: ImageDto[] = [];     // 最近一次渲染的图片列表，供�
 let allSources: WallpaperSource[] = []; // 缓存图源列表，用于判断 search 能力
 let currentPage = 1;                 // 当前页码，从 1 开始
 let hasMorePages = false;            // 上一页拿满了才认为有下一页
+
+/**
+ * 分辨率档位 → 最低像素总数。
+ *
+ * 为什么比像素总数而不是"宽 ≥ x 且 高 ≥ y"：竖屏壁纸（1080×1920）和横屏
+ * （1920×1080）像素数一样，都该算 1080p。逐边比较会把竖图全判掉。
+ */
+const RES_TIERS: Record<string, number> = {
+  any: 0,
+  fhd: 1920 * 1080,
+  qhd: 2560 * 1440,
+  uhd: 3840 * 2160,
+};
+let minPixels = 0;                   // 0 = 不筛选
 
 // ── 工具 ────────────────────────────────────────────────────
 
@@ -52,6 +68,55 @@ function showToast(msg: string, isError = false) {
   toastTimer = setTimeout(() => {
     toastEl.hidden = true;
   }, 2500);
+}
+
+// ── 主题 ────────────────────────────────────────────────────
+
+type Theme = "light" | "dark";
+
+const THEME_KEY = "moewallpaper.theme";
+
+/** 读写 localStorage 都包一层：存储被禁时不该让整个界面崩掉。 */
+function loadStoredTheme(): Theme | null {
+  try {
+    const value = localStorage.getItem(THEME_KEY);
+    return value === "light" || value === "dark" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeTheme(theme: Theme) {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // 存不下就算了，本次会话内仍然生效
+  }
+}
+
+function systemTheme(): Theme {
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme: Theme) {
+  document.documentElement.dataset.theme = theme;
+  // 显示的是"点下去会切到哪"，不是当前状态。反着放用户每次都要先点错一次。
+  themeBtn.textContent = theme === "dark" ? "☀️" : "🌙";
+  const label = theme === "dark" ? "切换到浅色主题" : "切换到深色主题";
+  themeBtn.title = label;
+  themeBtn.setAttribute("aria-label", label);
+}
+
+function initTheme() {
+  // 没有存过就跟随系统一次，然后固定下来——不在运行中跟着系统变，
+  // 否则用户手动选完，系统一变又被覆盖，会以为按钮坏了。
+  applyTheme(loadStoredTheme() ?? systemTheme());
+
+  themeBtn.onclick = () => {
+    const next: Theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    applyTheme(next);
+    storeTheme(next);
+  };
 }
 
 // ── 详情页覆盖层 ────────────────────────────────────────────
@@ -265,14 +330,19 @@ function renderError(err: unknown) {
   gridEl.innerHTML = "";
 }
 
-function renderGrid(images: ImageDto[]) {
+function renderGrid(images: ImageDto[], totalOnPage = images.length) {
   const pageText = currentPage > 1 ? `第 ${currentPage} 页 · ` : "";
-  statusEl.textContent = `${pageText}共 ${images.length} 张图片`;
+  const hidden = totalOnPage - images.length;
+  statusEl.textContent =
+    hidden > 0
+      ? `${pageText}共 ${images.length} 张（按分辨率筛掉 ${hidden} 张）`
+      : `${pageText}共 ${images.length} 张图片`;
   statusEl.className = "status";
 
   gridEl.innerHTML = images
     .map((img, idx) => {
-      const title = esc(img.pageUrl ?? img.imageUrl);
+      const dims = img.width && img.height ? `${img.width}×${img.height} · ` : "";
+      const title = esc(dims + (img.pageUrl ?? img.imageUrl));
       const thumb = esc(img.thumbnailUrl);
       return `
     <button class="card" data-idx="${idx}" title="${title}">
@@ -293,6 +363,29 @@ function renderGrid(images: ImageDto[]) {
       img.alt = "加载失败";
     };
   });
+}
+
+// ── 分辨率筛选 ──────────────────────────────────────────────
+
+/**
+ * 按当前档位过滤一页图片。
+ *
+ * 尺寸未知的图在设了档位时**一律筛掉**：没有尺寸就是没有证据，
+ * 不能因为"看着还行"就放进来——那样用户会以为筛选是坏的。
+ * 界面上会显示"筛掉 N 张"，所以用户能看见这件事发生。
+ */
+function visibleImages(images: ImageDto[]): ImageDto[] {
+  if (minPixels === 0) return images;
+
+  return images.filter((img) => {
+    if (!img.width || !img.height) return false;
+    return img.width * img.height >= minPixels;
+  });
+}
+
+/** 不重新联网，只用当前这一页的数据重画。 */
+function refreshGrid() {
+  renderGrid(visibleImages(lastImages), lastImages.length);
 }
 
 // ── 事件委托：点缩略图 → 打开详情页 ─────────────────────────
@@ -370,7 +463,7 @@ async function loadImages(sourceId: string, query?: string, page = 1) {
         // 留一个空白网格会让人以为图源坏了。
         currentPage = page - 1;
         updatePager();
-        if (lastImages.length > 0) renderGrid(lastImages);
+        if (lastImages.length > 0) refreshGrid();
         showToast("没有更多了");
       } else {
         updatePager();
@@ -379,7 +472,7 @@ async function loadImages(sourceId: string, query?: string, page = 1) {
     } else {
       lastImages = images;
       hasMorePages = images.length >= FULL_PAGE_HINT;
-      renderGrid(images);
+      refreshGrid();
       updatePager();
     }
   } catch (err) {
@@ -391,6 +484,9 @@ async function loadImages(sourceId: string, query?: string, page = 1) {
 // ── 初始化 ──────────────────────────────────────────────────
 
 async function init() {
+  // 主题要在任何渲染之前定下来，否则会先闪一下另一个配色
+  initTheme();
+
   // 初始化详情页覆盖层
   initDetailOverlay();
 
@@ -446,6 +542,12 @@ async function init() {
       if (hasMorePages) {
         loadImages(currentSourceId, currentQuery || undefined, currentPage + 1);
       }
+    };
+
+    // 分辨率筛选：只重画当前页，不重新联网
+    resSelect.onchange = () => {
+      minPixels = RES_TIERS[resSelect.value] ?? 0;
+      if (lastImages.length > 0) refreshGrid();
     };
 
     // 初始化搜索框状态
