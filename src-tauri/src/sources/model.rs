@@ -30,6 +30,13 @@ pub struct ResponseMapping {
     pub thumbnail_url: Option<String>,
     pub page_url: Option<String>,
     pub tags: Option<String>,
+    /// 原图宽度的字段路径。不配 = 这个图源不提供尺寸，分辨率筛选对它无效。
+    ///
+    /// 数字和数字字符串都认（有的 API 返回 `1920`，有的返回 `"1920"`）——
+    /// 只认数字的话，字符串型的图源会静默地永远筛不出东西，而且没有任何报错。
+    pub width: Option<String>,
+    /// 原图高度的字段路径。规则同 `width`。
+    pub height: Option<String>,
 }
 
 /// 图源的附加过滤。

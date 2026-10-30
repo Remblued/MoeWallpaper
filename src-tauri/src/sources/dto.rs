@@ -19,6 +19,13 @@ pub struct ImageDto {
     pub image_url: String,
     pub thumbnail_url: String,
     pub page_url: Option<String>,
+    /// 原图宽高，图源不提供时为 `None`。
+    ///
+    /// **故意不兜底成 0**：0 会被当成"特别小"，分辨率筛选就会把未知尺寸的图
+    /// 全筛掉，而用户看到的是"这个图源筛完就空了"——把"不知道"伪装成"很小"，
+    /// 是最容易骗过 review 的一种错。
+    pub width: Option<u32>,
+    pub height: Option<u32>,
 }
 
 impl From<ImageRef> for ImageDto {
@@ -34,6 +41,8 @@ impl From<ImageRef> for ImageDto {
             image_url: r.image_url,
             thumbnail_url,
             page_url: r.page_url,
+            width: r.width,
+            height: r.height,
         }
     }
 }
@@ -42,13 +51,20 @@ impl From<ImageRef> for ImageDto {
 mod tests {
     use super::*;
 
+    /// 测试里大部分用例不关心尺寸，给个默认值省得每处都写两行。
+    fn ref_with(image_url: &str, thumbnail_url: Option<&str>, page_url: Option<&str>) -> ImageRef {
+        ImageRef {
+            image_url: image_url.to_string(),
+            thumbnail_url: thumbnail_url.map(str::to_string),
+            page_url: page_url.map(str::to_string),
+            width: None,
+            height: None,
+        }
+    }
+
     #[test]
     fn missing_thumbnail_falls_back_to_image() {
-        let dto = ImageDto::from(ImageRef {
-            image_url: "big.png".to_string(),
-            thumbnail_url: None,
-            page_url: None,
-        });
+        let dto = ImageDto::from(ref_with("big.png", None, None));
 
         assert_eq!(dto.image_url, "big.png");
         assert_eq!(dto.thumbnail_url, "big.png");
@@ -57,23 +73,36 @@ mod tests {
 
     #[test]
     fn existing_thumbnail_is_kept() {
-        let dto = ImageDto::from(ImageRef {
-            image_url: "big.png".to_string(),
-            thumbnail_url: Some("small.png".to_string()),
-            page_url: Some("post".to_string()),
-        });
+        let dto = ImageDto::from(ref_with("big.png", Some("small.png"), Some("post")));
 
         assert_eq!(dto.thumbnail_url, "small.png");
         assert_eq!(dto.page_url.as_deref(), Some("post"));
     }
 
     #[test]
+    fn dimensions_pass_through() {
+        let mut source = ref_with("a.png", None, None);
+        source.width = Some(1920);
+        source.height = Some(1080);
+
+        let dto = ImageDto::from(source);
+
+        assert_eq!(dto.width, Some(1920));
+        assert_eq!(dto.height, Some(1080));
+    }
+
+    #[test]
+    fn unknown_dimensions_stay_none() {
+        // 未知 ≠ 0。渲染成 0 会让前端的筛选把它当成"特别小"而筛掉。
+        let dto = ImageDto::from(ref_with("a.png", None, None));
+
+        assert_eq!(dto.width, None);
+        assert_eq!(dto.height, None);
+    }
+
+    #[test]
     fn serializes_to_camel_case() {
-        let dto = ImageDto::from(ImageRef {
-            image_url: "a".to_string(),
-            thumbnail_url: Some("b".to_string()),
-            page_url: None,
-        });
+        let dto = ImageDto::from(ref_with("a", Some("b"), None));
         let json = serde_json::to_string(&dto).unwrap();
         assert!(json.contains("\"imageUrl\""));
         assert!(json.contains("\"thumbnailUrl\""));

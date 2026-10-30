@@ -313,6 +313,8 @@ mod tests {
                 thumbnail_url: None,
                 page_url: None,
                 tags: None,
+                width: None,
+                height: None,
             },
             filter: Default::default(),
             search: None,

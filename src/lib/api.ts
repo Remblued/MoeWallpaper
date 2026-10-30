@@ -28,6 +28,9 @@ export interface ImageDto {
   imageUrl: string;
   thumbnailUrl: string;
   pageUrl: string | null;
+  /** 原图宽高。图源不提供时为空——**未知不等于小**，筛分辨率时不能当成 0。 */
+  width?: number | null;
+  height?: number | null;
 }
 
 /** 返回内置图源列表。 */

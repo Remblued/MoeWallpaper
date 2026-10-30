@@ -27,11 +27,29 @@ pub struct ImageRef {
     pub image_url: String,
     pub thumbnail_url: Option<String>,
     pub page_url: Option<String>,
+    /// 原图尺寸。图源不提供时为 `None`——**未知不等于小**，筛选时不能当 0 处理。
+    pub width: Option<u32>,
+    pub height: Option<u32>,
 }
 
 /// 取某个路径上的字符串值；路径不存在或不是字符串都返回 None。
 fn string_at<'a>(item: &'a Value, path: &str) -> Option<&'a str> {
     get_by_path(item, path)?.as_str()
+}
+
+/// 取某个路径上的整数；路径不存在、不是整数、超出 u32 范围都返回 None。
+///
+/// 数字和数字字符串都收：有的 API 返回 `1920`，有的返回 `"1920"`。
+/// 只认数字的话，字符串型图源的宽高会静默变成 None，分辨率筛选永远筛不出东西，
+/// 而且不报任何错——"安静地不起作用"是最难查的一类 bug。
+fn number_at(item: &Value, path: &str) -> Option<u32> {
+    let value = get_by_path(item, path)?;
+
+    if let Some(n) = value.as_u64() {
+        return u32::try_from(n).ok();
+    }
+
+    value.as_str()?.trim().parse::<u32>().ok()
 }
 
 /// 按图源配置的映射规则，从一份 API 响应里提取图片列表。
@@ -74,6 +92,8 @@ pub fn extract_images(
                 .as_deref()
                 .and_then(|path| string_at(item, path))
                 .map(str::to_string),
+            width: mapping.width.as_deref().and_then(|p| number_at(item, p)),
+            height: mapping.height.as_deref().and_then(|p| number_at(item, p)),
         });
     }
 
@@ -100,6 +120,8 @@ mod tests {
             thumbnail_url: Some("sample_url".to_string()),
             page_url: Some("post_url".to_string()),
             tags: Some("tags".to_string()),
+            width: Some("width".to_string()),
+            height: Some("height".to_string()),
         }
     }
 
@@ -192,5 +214,44 @@ mod tests {
         let result = extract_images(&mapping("data"), &v);
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn dimensions_work_for_numbers_and_numeric_strings() {
+        let v = serde_json::json!({
+            "data": [
+                {"file_url": "a", "width": 1920, "height": 1080},
+                {"file_url": "b", "width": "2560", "height": "1440"},
+                {"file_url": "c", "width": "nope", "height": 1080},
+                {"file_url": "d"},
+            ]
+        });
+        let images = extract_images(&mapping("data"), &v).unwrap();
+
+        assert_eq!(
+            (images[0].width, images[0].height),
+            (Some(1920), Some(1080))
+        );
+        // 字符串形态的数字也要认，否则这类图源的分辨率筛选会静默失效
+        assert_eq!(
+            (images[1].width, images[1].height),
+            (Some(2560), Some(1440))
+        );
+        // 坏值只影响它自己那个字段，不影响同一条的另一个字段
+        assert_eq!((images[2].width, images[2].height), (None, Some(1080)));
+        // 没有就是 None，不能变成 0
+        assert_eq!((images[3].width, images[3].height), (None, None));
+    }
+
+    #[test]
+    fn unconfigured_dimensions_are_none() {
+        let mut map = mapping("data");
+        map.width = None;
+        map.height = None;
+
+        let v = serde_json::json!({"data":[{"file_url":"a","width":1920,"height":1080}]});
+        let images = extract_images(&map, &v).unwrap();
+
+        assert_eq!((images[0].width, images[0].height), (None, None));
     }
 }

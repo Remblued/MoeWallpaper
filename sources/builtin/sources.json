@@ -17,7 +17,9 @@
         "itemsPath": "data",
         "imageUrl": "path",
         "thumbnailUrl": "thumbs.large",
-        "pageUrl": "url"
+        "pageUrl": "url",
+        "width": "dimension_x",
+        "height": "dimension_y"
       },
       "filter": {
         "sfwQuery": "purity=100"
@@ -63,7 +65,9 @@
       },
       "response": {
         "itemsPath": "data",
-        "imageUrl": "urls.original"
+        "imageUrl": "urls.original",
+        "width": "width",
+        "height": "height"
       },
       "filter": {
         "sfwQuery": "r18=0"

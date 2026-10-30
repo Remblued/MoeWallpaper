@@ -39,6 +39,10 @@ export interface ResponseMapping {
   pageUrl?: string;
   /** 标签字段，用于展示和二次过滤。 */
   tags?: string;
+  /** 原图宽度的字段路径；省略 = 该图源不提供尺寸，分辨率筛选对它无效。 */
+  width?: string;
+  /** 原图高度的字段路径；规则同 `width`。 */
+  height?: string;
 }
 
 /**
