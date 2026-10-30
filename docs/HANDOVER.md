@@ -243,7 +243,9 @@ interface ImageDto {
 2. **提交信息用 Conventional Commits**：`feat:` 新功能 / `fix:` 修 bug / `docs:` / `refactor:` / `test:` / `chore:`。标题不超过 72 字符，正文说"为什么"。
 3. **提交前三道门全绿**：`cargo fmt`、`cargo clippy --all-targets -- -D warnings`、`cargo test`。前端加 `npx tsc --noEmit`。
 4. **新功能必须有测试**，至少覆盖"正常"和"一种出错"。
-5. **永不提交**：`target/`、`node_modules/`、`dist/`、任何图片文件、`.env`。
+5. **永不提交**：`target/`、`node_modules/`、`dist/`、`.env`、任何**壁纸或截图**。
+   例外：应用图标（`src-tauri/icons/`、`app-icon.png`）必须提交——它们属于代码资产，
+   不是内容。
 6. **路径只在 `fs/paths.rs` 里拼**。别处一律调那里的函数。
 7. **命令放 `commands/`，实现放业务目录。**
 8. **错误信息必须带上下文**：哪个路径、哪个字段、哪个操作。`format!("创建目录失败 {:?}: {}", path, e)`。
