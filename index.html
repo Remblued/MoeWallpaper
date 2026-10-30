@@ -10,12 +10,19 @@
 
   <body>
     <main class="container">
-      <!-- 顶部：图源选择 + 状态 -->
+      <!-- 顶部：图源选择 + 搜索 -->
       <header class="toolbar">
         <h1>MoeWallpaper</h1>
         <select id="source-select" disabled>
           <option value="">载入图源中…</option>
         </select>
+        <input
+          id="search-input"
+          type="search"
+          placeholder="搜索关键词…"
+          disabled
+          aria-label="搜索壁纸"
+        />
       </header>
 
       <!-- 状态提示条（加载中 / 空 / 出错） -->

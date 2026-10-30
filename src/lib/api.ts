@@ -7,12 +7,20 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
+/** 搜索能力描述（对应后端 SearchSpec）。 */
+export interface SearchSpec {
+  url: string;
+  english?: boolean;
+}
+
 /** 与后端 WallpaperSource 序列化结果对应（camelCase）。 */
 export interface WallpaperSource {
   id: string;
   name: string;
   enabled?: boolean;
   homepage?: string | null;
+  /** 不配 = 该图源不支持搜索。 */
+  search?: SearchSpec | null;
 }
 
 /** 与后端 ImageDto 序列化结果对应（camelCase）。 */
@@ -27,18 +35,25 @@ export async function listSources(): Promise<WallpaperSource[]> {
   return invoke<WallpaperSource[]>("list_sources");
 }
 
-/** 从指定图源拉一页图片。page 从 1 开始。 */
+/** 从指定图源拉一页图片。page 从 1 开始。query 不传 = 浏览，传了 = 搜索。 */
 export async function fetchImages(
   sourceId: string,
   page: number,
+  query?: string,
 ): Promise<ImageDto[]> {
   return invoke<ImageDto[]>("fetch_images", {
     sourceId,
     page,
+    query,
   });
 }
 
 /** 把一张远程图片设为桌面壁纸。 */
 export async function setWallpaper(imageUrl: string): Promise<void> {
   await invoke("set_wallpaper", { imageUrl });
+}
+
+/** 下载图片到用户的「图片」目录，返回绝对路径。 */
+export async function saveImage(imageUrl: string): Promise<string> {
+  return invoke<string>("save_image", { imageUrl });
 }
