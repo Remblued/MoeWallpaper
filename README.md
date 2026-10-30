@@ -50,8 +50,9 @@ Three known traps:
 - **A proxy client with the system proxy switched off is the same as no proxy.** The
   app falls back to a direct connection, and we just established that direct does not
   work.
-- **Domestic sources do not exist yet.** That is the biggest gap in this project; see
-  [Roadmap](#roadmap).
+- **Domestic sources do not exist yet.** Candidates have been researched and tested,
+  see [docs/SOURCES-CN.md](docs/SOURCES-CN.md): the 360 wallpaper category list works
+  on a direct connection, but wiring it up needs three capabilities first.
 
 ## Size, measured not claimed
 
