@@ -11,9 +11,10 @@
 /** HTTP 请求描述。 */
 export interface HttpRequestSpec {
   /**
-   * 请求地址。支持两个占位符，由代码在发请求前替换：
+   * 请求地址。支持三个占位符，由代码在发请求前替换：
    * - `{limit}`：本次要几张图（当前页大小）
    * - `{page}`：页码，从 1 开始
+   * - `{query}`：搜索关键词（只有在 `search.url` 里才有意义）
    */
   url: string;
   method?: "GET" | "POST";
@@ -40,10 +41,46 @@ export interface ResponseMapping {
   tags?: string;
 }
 
-/** 过滤规则。默认 SFW：宁可少给几张图，也不给不该给的内容。 */
+/**
+ * 图源的附加过滤。
+ *
+ * 注意这**不是** `sfwOnly: true` 那种布尔开关。布尔字段看起来像保护，
+ * 但只要没有代码消费它，它就是一句口号——比没有更糟。
+ *
+ * 真正起作用的是请求参数，所以这里存的是"要注入的参数"，由后端拼到地址上。
+ */
 export interface SourceFilter {
-  /** 是否只接受被标记为安全的内容，默认 true。 */
-  sfwOnly?: boolean;
+  /**
+   * 由后端注入到请求地址末尾的安全参数，例如 `purity=100`、`r18=0`。
+   *
+   * 只写裸参数，不要带 `?` 或 `&`。需要内容限制的图源必须写；
+   * 本身只提供安全内容的图源留空。
+   */
+  sfwQuery?: string;
+}
+
+/**
+ * 搜索能力。
+ *
+ * **不配这个块 = 该图源不支持搜索**，界面上搜索框要对它禁用。
+ * 这比"配了但静默无效"好：用户能看见边界在哪。
+ */
+export interface SearchSpec {
+  /**
+   * 搜索用的完整地址模板，**必须包含 `{query}`**。
+   *
+   * `{page}` / `{limit}` 同样可用。关键词由后端编码后填入。
+   * 之所以不复用 `request.url`：有些站点的搜索是另一个端点
+   * （nekos.best 浏览走 `/api/v2/neko`，搜索走 `/api/v2/search` 且必须带 `type`）。
+   */
+  url: string;
+  /**
+   * 关键词要不要先翻成英文（走 `search/terms.json` 词表）。
+   *
+   * - `true`：wallhaven / nekos.best 只认英文
+   * - `false`：lolicon 走 pixiv 标签，中文直接可用
+   */
+  english?: boolean;
 }
 
 /** 单个图源。 */
@@ -59,6 +96,8 @@ export interface WallpaperSource {
   request: HttpRequestSpec;
   response: ResponseMapping;
   filter?: SourceFilter;
+  /** 不配 = 不支持搜索。 */
+  search?: SearchSpec;
 }
 
 /** `sources/builtin/*.json` 的顶层结构。 */

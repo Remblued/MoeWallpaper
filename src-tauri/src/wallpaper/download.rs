@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use crate::fs::{naming, paths};
+use crate::fs::{dirs, files, naming, paths};
+use crate::sources::fetch::client;
 
 /// 这张图在缓存里的固定位置：`wallpapers/<URL哈希><扩展名>`。
 ///
@@ -17,38 +18,54 @@ pub fn cached_path(url: &str) -> Result<PathBuf, String> {
     Ok(paths::wallpapers_dir()?.join(name))
 }
 
-// ============================================================================
-//  下面这个函数由你实现（A4 的核心）
-// ============================================================================
-
-/// 保证这张图已经在本地磁盘上，返回它的路径。
-///
-/// # 实现步骤
-///
-/// 1. 算目标路径：`cached_path(url)?`
-/// 2. **先查缓存**：`dest.exists()` 为真就直接 `Ok(dest)` 返回。
-///    这一步就是"不重复下载"的全部实现——每次设壁纸前都走一遍，省一次网络往返。
-/// 3. 确保目录存在：`crate::fs::dirs::ensure_dir(父目录)`。
-///    第一次运行 `wallpapers/` 还不存在，直接写文件会失败。
-/// 4. 下载：`client().get(url).send().await`
-///    —— 但 `client()` 在 `sources::fetch` 里是私有的，这里有两个选择：
-///    (a) 把那个 `fn client()` 改成 `pub(crate)`，两处共用（推荐，省一次 TLS 握手）
-///    (b) 在这里自己 `reqwest::Client::new()`（简单但浪费）
-/// 5. 查状态码：非 2xx 返回 `Err`，错误信息带状态码和 URL
-/// 6. 取字节：`.bytes().await` → 得到 `reqwest::Response` 的 `Bytes`
-/// 7. 原子写入：`crate::fs::files::write_atomic(&dest, &bytes)`
-///    —— 不要用 `std::fs::write`，那就是上次讲的"写到一半断电"问题
-/// 8. 返回 `Ok(dest)`
-///
-/// # 错误处理约定
-///
-/// - 任何一步失败 → `Err(String)`，消息里带 URL
-/// - 注意：目录可以写、但文件写不进去（磁盘满、杀软拦截）也算失败，别吞掉
+/// 保证这张图已经在本地。已缓存时直接返回路径，不发任何请求。
 pub async fn ensure_cached(url: &str) -> Result<PathBuf, String> {
-    // TODO(你写)：按上面 8 步实现。
-    // 现在这行只是为了让变量被"用到"，你写完后删掉它。
-    let _ = url;
-    todo!("ensure_cached 由你实现")
+    // 1. 算目标路径
+    let dest = cached_path(url)?;
+
+    // 2. 先查缓存：命中就完全不碰网络
+    if dest.is_file() {
+        return Ok(dest);
+    }
+
+    // 3. 确保父目录存在
+    let parent = dest
+        .parent()
+        .ok_or_else(|| format!("缓存路径没有父目录: {}（URL: {}）", dest.display(), url))?;
+    dirs::ensure_dir(parent).map_err(|e| {
+        format!(
+            "创建缓存目录 {} 失败（URL: {}）: {}",
+            parent.display(),
+            url,
+            e
+        )
+    })?;
+
+    // 4. 发请求
+    let resp = client()
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("下载 {} 失败: {}", url, e))?;
+
+    // 5. 查状态码
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("下载 {} 返回状态码 {}", url, status));
+    }
+
+    // 6. 取字节
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("读取 {} 的响应体失败: {}", url, e))?;
+
+    // 7. 原子写入
+    files::write_atomic(&dest, &bytes)
+        .map_err(|e| format!("写入 {} 的缓存文件 {} 失败: {}", url, dest.display(), e))?;
+
+    // 8. 返回
+    Ok(dest)
 }
 
 #[cfg(test)]
@@ -72,5 +89,33 @@ mod tests {
     fn path_lives_under_wallpapers_dir() {
         let p = cached_path("https://a.com/x.png").unwrap();
         assert!(p.starts_with(paths::wallpapers_dir().unwrap()));
+    }
+
+    /// A4 的验收标准。
+    ///
+    /// 手法：先把"缓存文件"手工造出来，再拿一个**永远连不上**的地址去调用。
+    /// 如果缓存判断生效 → 直接返回，压根不碰网络，测试通过；
+    /// 如果没有判断 → 它会去连 example.invalid，失败返回 Err，测试失败。
+    ///
+    /// 这样就不用真的下载任何东西，测试既是确定的、又不依赖网络。
+    ///
+    /// 注意：这条测试会在真实的用户缓存目录里建一个文件，跑完会删掉。
+    /// （更好的做法是让缓存目录可注入，但那是一次重构，先记在技术债里。）
+    #[tokio::test]
+    async fn existing_file_skips_download() {
+        let url = "https://example.invalid/never-fetched.jpg";
+        let dest = cached_path(url).unwrap();
+
+        crate::fs::dirs::ensure_dir(dest.parent().unwrap()).unwrap();
+        crate::fs::files::write_atomic(&dest, b"already here").unwrap();
+
+        let got = ensure_cached(url)
+            .await
+            .expect("文件已经在缓存里，不该再去联网");
+
+        assert_eq!(got, dest);
+        assert_eq!(std::fs::read(&dest).unwrap(), b"already here");
+
+        std::fs::remove_file(&dest).unwrap();
     }
 }

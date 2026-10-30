@@ -22,14 +22,17 @@ pub fn to_wide(s: &str) -> Vec<u16> {
     buf
 }
 
-//UNC 路径不管!
+/// 把本地图片设为桌面壁纸。路径必须指向一个已存在的文件。
+///
+/// 失败时 Win32 只返回 0，不告诉原因。
 pub fn set_wallpaper(path: &Path) -> Result<(), String> {
-    // 1. 绝对路径
+    // 绝对路径：Windows 不认相对路径
     let abs = path
         .canonicalize()
         .map_err(|e| format!("无法解析壁纸路径 {}: {}", path.display(), e))?;
 
-    // canonicalize 在 Windows 上会加 \\?\ 前缀，某些旧接口不认,小改一下
+    // canonicalize 会加上 \\?\ 前缀，某些旧接口不认，剥掉它。
+    // 只处理本地路径：UNC（\\?\UNC\...）剥完会坏，我们的文件永远在本地，不管。
     let abs_str = abs.to_string_lossy();
     let abs_str = abs_str.strip_prefix(r"\\?\").unwrap_or(abs_str.as_ref());
 

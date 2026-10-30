@@ -2,15 +2,20 @@
  * Mock 数据层。
  *
  * USE_MOCK = true  → 前端用假数据，不碰后端
- * USE_MOCK = false → 走真实 IPC（等 A 的 fetch_images 就绪后切过来）
+ * USE_MOCK = false → 走真实 IPC
  *
  * 切换只需改这一个常量。
  */
 
 import type { ImageDto } from "./api";
 
-/** ★ 开关：true = mock，false = 真实后端 ★ */
-export const USE_MOCK = true;
+/**
+ * ★ 开关：true = mock，false = 真实后端 ★
+ *
+ * **发布前必须是 false。** 打包出去的正式版本带假数据，用户装完打开看到的是
+ * placehold.co 的占位图——那是个发布事故，不是功能。
+ */
+export const USE_MOCK = false;
 
 const COLORS = [
   "e8a0bf", "a0c4e8", "bfe8a0", "e8d4a0", "c4a0e8",

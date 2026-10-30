@@ -49,6 +49,41 @@ pub fn extension_from_url(url: &str) -> &'static str {
     }
 }
 
+/// 从 URL 里取一个**给人看**的文件名主干；取不到就用哈希。
+///
+/// - `https://a.com/img/1234.png` → `1234`
+/// - `https://a.com/api/posts`    → FNV 哈希（没有像文件名的部分）
+/// - `https://a.com/图/猫.png`     → FNV 哈希（非 ASCII 直接放弃，别猜）
+///
+/// 只保留 `A-Z a-z 0-9 _ -`。文件名里的奇怪字符是 Windows 上各种
+/// "删不掉、打不开、路径太长"问题的来源，不如一次性过滤掉。
+pub fn friendly_stem(url: &str) -> String {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+
+    // 取最后一段：`/a/b/1234.png` → `1234.png`；以 `/` 结尾就是空
+    let segment = path.rsplit('/').next().unwrap_or("");
+
+    // 去掉扩展名（最后一个点之后的部分）
+    let stem = match segment.rsplit_once('.') {
+        Some((head, _ext)) => head,
+        None => segment,
+    };
+
+    // 只留安全字符
+    let cleaned: String = stem
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .take(64) // 太长的名字在某些工具里会出问题，截断
+        .collect();
+
+    if cleaned.is_empty() {
+        // 没有可用的名字，退回哈希：至少它是稳定的、唯一的
+        url_hash(url)
+    } else {
+        cleaned
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
