@@ -26,17 +26,18 @@ bundled per app — and three commitments to go with it:
 ## Size, measured not claimed
 
 Every number in this table is produced on one machine, with one method, on the same
-day, from a **release** build. `TBD` means *not measured yet* — it will stay `TBD`
-until someone can reproduce it. The method lives in [docs/BENCHMARK.md](docs/BENCHMARK.md).
+day, from a **release** build. `TBD` means *not measured yet* — **all four cells are
+measured, there is no `TBD` left**. The method lives in [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 | Metric | MoeWallpaper | Minimal Electron app | How it is measured |
 | --- | --- | --- | --- |
 | Installer size (`.exe`) | **1.69 MB** | **115.57 MB** | file size of the installer produced by the build |
 | Installed size on disk | **5.19 MB** | **356.77 MB** | sum of all files under the install directory |
-| Cold start to visible window | **41 ms** (median) | TBD | median of 10 launches, from `Start-Process` to first window |
-| Idle memory (60 s after launch) | **212 MB** (private) | TBD | all app + webview processes, not just the main one |
+| Cold start to visible window | **17.5 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
+| Idle memory (60 s after launch) | **218 MB** (private) | **133.5 MB** (private) | all app + webview processes, not just the main one |
 
-The installer is **about 68× smaller** (115.57 MB versus 1.69 MB).
+The installer is **about 68× smaller** (115.57 MB versus 1.69 MB) and cold start is
+**about 6× faster**.
 
 Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
 Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
@@ -50,18 +51,20 @@ Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
 - **Cold start is *window appears*, not *page rendered*.** The latter is a few
   hundred milliseconds later.
 
-Idle memory is reported as **private** (212 MB), not working set (371 MB) — summing
+Idle memory is reported as **private** (218 MB), not working set (382 MB) — summing
 working sets double-counts DLL pages shared between the app and WebView2 processes.
-The Electron baseline's cold start and idle memory are still `TBD`: both need a
-desktop session that can launch GUI processes, following
-[docs/BENCHMARK.md](docs/BENCHMARK.md) section 3.
+
+**This is the metric we lose: 218 MB against 133.5 MB, 85 MB more.** We do not bundle
+a browser engine; we borrow the system WebView2, which spawns three extra helper
+processes and puts 117 MB private into its GPU process alone. Electron's bundled
+Chromium holds the same blank page in 133.5 MB. **It is written down here rather than
+softened.**
 
 That 356.77 MB is not padding either: a single file, `BaselineElectron.exe`, is
 238.23 MB — 46× the entire installed footprint of this project (5.19 MB).
 
-Worth saying plainly: most of that memory is the WebView2 shell — the GPU process
-alone holds 117 MB private, against 6 MB for our own process. That is not something
-this project can optimise away, and the README should not pretend otherwise.
+That 117 MB GPU process is not something this project can optimise away, and no amount
+of work on image loading would move it — the memory is not on our side of the fence.
 
 Two rules keep this honest:
 

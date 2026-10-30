@@ -87,9 +87,8 @@ $s = $t | Sort-Object
 口径说明：这是"到窗口句柄出现"的时间，**不是**"首屏渲染完成"。WebView2 的渲染发生
 在窗口之后，两者相差可能几百毫秒。README 必须按这个口径措辞。
 
-⚠️ **历史数据不一致**：2026-10-30 记的 MoeWallpaper 冷启动 41 ms 是用旧的
-`Start-Process`（Shell 路径）测出来的。在按本节口径补测之前，两个基线的冷启动
-**不能直接对比**——这条已记在 §5 待办里。
+✅ 更早记的 41 ms 是用旧的 `Start-Process`（Shell 路径）测的，**已作废**。按本节口径
+复测得到 **17.5 ms**：同一台机器、同一个 exe，只换启动路径就差 23 ms 以上。
 
 ### 2.4 空闲内存
 
@@ -135,15 +134,20 @@ electron-builder 的 NSIS 安装器就是把这 73 个文件原样铺到安装�
 
 ### 3.2 冷启动和空闲内存
 
-跑 `bench/electron-baseline/measure.ps1`（普通桌面会话，它会启动 GUI 程序）：
+**先把产物搬到项目目录之外再测。** 在项目目录树内启动这个 Electron 产物会崩
+（`0x80000003`，机制未查明，见 §5），搬出去就正常：
 
 ```powershell
-cd bench\electron-baseline
-powershell -ExecutionPolicy Bypass -File .\measure.ps1
+robocopy bench\electron-baseline\dist\win-unpacked D:\bench-electron /MIR
+powershell -ExecutionPolicy Bypass -File bench\electron-baseline\measure.ps1
 ```
+
+（`measure.ps1` 里写的是 `D:\bench-electron\BaselineElectron.exe`；换路径要一起改。）
 
 脚本按 2.3 / 2.4 的口径测，并且在**窗口没出现**或**进程提前退出**时报错，而不是给出
 一个数字。测不到就不许填，这一条比"把表填满"重要。
+
+本项目的对照数字用同样的方法、同一时刻测：见 §5。
 
 ## 4. 对比纪律
 
@@ -170,8 +174,8 @@ Defender    实时保护关闭（RealTimeProtectionEnabled = False）
                MoeWallpaper    Electron 基线
 安装包         1.69 MB         115.57 MB
 安装后         5.19 MB         356.77 MB
-冷启动(中位)    41 ms           TBD
-空闲内存        212 MB（私有）   TBD
+冷启动(中位)    17.5 ms         104.5 ms
+空闲内存        218.4 MB（私有） 133.5 MB（私有）
 ```
 
 **安装包** 1,773,651 字节。**安装后** 5,443,478 字节（`moe-wallpaper.exe`
@@ -179,48 +183,53 @@ Defender    实时保护关闭（RealTimeProtectionEnabled = False）
 `tauri.conf.json` 没配 `webviewInstallMode`，走默认的 `downloadBootstrapper`，
 即 WebView2 由安装器在目标机器上按需下载。
 
-**冷启动 10 次原始值（ms）**：
+**冷启动 10 次原始值（ms）**，两列都是同一台机器、同一防护状态、§2.3 的 CreateProcess 口径：
 
 ```text
-200, 54, 45, 37, 33, 46, 37, 29, 49, 33
-min=29  median=41  max=200
+MoeWallpaper   31, 17, 17, 22, 17, 18, 36, 17, 22, 17      min=17   median=17.5  max=36
+Electron       100, 106, 110, 101, 103, 97, 102, 114, 108, 119   min=97  median=104.5 max=119
 ```
 
-首次 200 ms 含磁盘冷读，按要求**没有剔除**（§0 第 5 条：异常值不删，单独写出来）。
+首发不是最慢的一发（缓存已热），所以这里没有需要单独说明的首发异常值。
 
-⚠️ 这 10 发是用**已废弃的** `Start-Process`（Shell 路径）测的，见 §2.3。在按新口径
-补测之前，41 ms 只用于"本项目自身的历史对比"，**不用于和 Electron 基线对比**。
+⚠️ **更早记录的 41 ms 已作废**（原始值 200, 54, 45, 37, 33, 46, 37, 29, 49, 33）。
+那 10 发是用 Shell 路径（`Start-Process`）测的，见 §2.3。同一个 exe、同一台机器，
+只换启动路径就差 23 ms——§2.3 那条规矩不是形式主义。
 
-**空闲内存 3 次，启动后静置 60 秒，6 个进程**（应用 1 + WebView2 5）：
+**空闲内存 3 次，启动后静置 60 秒**：
 
 ```text
-工作集  374.0 / 371.2 / 364.8 MB   中位数 371.2 MB
-私有    211.0 / 214.5 / 212.5 MB   中位数 212.5 MB
+             进程数                     私有（中位数）                工作集（中位数）
+MoeWallpaper 7（应用 1 + WebView2 6）    218.4 MB（213.9/218.4/222.0）  381.9 MB
+Electron     4                          133.5 MB（133.5/135.4/133.2）  275.9 MB
 ```
 
-口径：**私有内存 212 MB 是主口径**，因为工作集直接相加会重复计算多个进程共享的
-DLL。工作集 371 MB 作为参考。
+**这一项本项目输了，输 85 MB。** 按 §4 第三条写出来，不删、不淡化。
 
-状态说明：测量时**网格已加载 24 张 wallhaven 缩略图**（截图确认，界面显示"共 24 张图片"）。
-这一点很关键——之前一次在断网状态测到 365 MB 工作集，和这次几乎一样，
-说明**内存大头是 WebView2 外壳，不是图片内容**。换句话说，这个数字不会因为
-图源换成更"重"的而大幅变化，但也没法通过优化图片加载来明显降低。
-
-单进程明细（一次采样）：
+单进程明细（各取一次采样）：
 
 ```text
-类型           工作集    私有
-gpu-process    83.0    116.9
-browser       129.0     39.2
-renderer       69.3     28.3
-utility        40.6     12.5
-utility        20.9      7.7
-browser        31.4      6.4
+MoeWallpaper
+  应用       私有   6.3 MB   工作集  28.8 MB
+  WebView2   私有 117.3 MB   工作集  81.3 MB   ← 和之前记的 GPU 进程 116.9 MB 一致
+  WebView2   私有  37.2 / 28.7 / 12.6 / 8.7 / 3.1 MB
+
+Electron 基线（类型未逐个标注）
+  带窗口的   私有  28.8 MB   工作集  84.3 MB
+  其余三个   私有  71.9 / 21.1 / 11.3 MB
 ```
 
-**注意 gpu-process 的私有内存 116.9 MB，是整个应用里最高的一项**，比主进程
-（6.4 MB）高一个数量级。想真正降内存，方向在 WebView2 的 GPU 合成，不在我们的
-Rust 代码。
+口径：**私有内存是主口径**，工作集直接相加会重复计算多个进程共享的 DLL。
+两边差别集中在"多出来的 WebView2 助手进程"和 GPU 进程的占用上；**没有做逐进程归因，
+所以不写原因**——只记录事实。
+
+状态说明：MoeWallpaper 测量时**网格已加载 24 张 wallhaven 缩略图**（界面显示"共 24 张
+图片"）。之前一次断网状态下测到 365 MB 工作集，和这次几乎一样——说明**内存大头是
+WebView2 外壳，不是图片内容**：既不会因为换更重的图源而大幅变化，也没法靠优化图片
+加载明显降低。
+
+**gpu 进程的私有内存（116.9 MB）是整个应用里最高的一项**，比主进程（6.4 MB）高一个
+数量级。想降内存，方向在 WebView2 的 GPU 合成，不在我们的 Rust 代码。
 
 ### Electron 基线 · 同一天 · 同一台机器
 
@@ -249,37 +258,44 @@ locales\*.pak              48.82 MB   （55 个语言包，本项目一个都用
 对照：`BaselineElectron.exe` 一个文件（238.23 MB）就是 MoeWallpaper 整个安装目录
 （5.19 MB）的 46 倍。安装包整体差 68 倍（115.57 / 1.69）。
 
-**冷启动和空闲内存这两格仍然是 `TBD`**，原因见 §3.2。
-
-**为什么 2026-10-30 没测到（三个假设都被推翻）**
+**这个基线一开始根本跑不起来，原因是一类很容易被误判的问题，必须记下来。**
 
 现象：进程启动后 50–100 ms 退出，`ExitCode = -2147483645`（`0x80000003`，
 `STATUS_BREAKPOINT`）；stderr 为空；事件日志没有 `Application Error`；WER 没有报告。
 
-已排除：
+四条假设全部被实验推翻：
 
 | 假设 | 怎么排除的 | 结论 |
 | --- | --- | --- |
-| Shell 发布者验证的弹窗吃掉了时间 | 改 `UseShellExecute = $false` 后不再弹「打开文件 - 安全警告」，但照旧崩 | 弹窗和崩溃是两件事 |
-| 第三方杀软拦截 | 本机有 Kaspersky 21.26（`KLIF`/`klflt` 驱动）与 McAfee 残留；**暂停卡巴保护后仍然崩** | 不是它 |
-| `app.asar` 损坏 / 完整性校验失败 | 手工解析 asar：7,360 B、结构正常、`main.js` 与仓库一致；PE `.rsrc` 里**没有** `ElectronAsarIntegrity` 资源，即不存在可失败的校验 | 不是它 |
+| Shell 发布者验证的弹窗吃掉了时间 | 改 `UseShellExecute = $false` 走 CreateProcess，弹窗消失 | 弹窗和崩溃是两件事 |
+| 第三方杀软拦截 | 本机 Kaspersky 21.26（`KLIF`/`klflt` 驱动）；暂停保护后仍然崩 | 不是它 |
+| `app.asar` 损坏 / 完整性校验失败 | 手工解析 asar（7,360 B，`main.js` 与仓库一致、5 个文件哈希全对）；PE `.rsrc` 里没有 `ElectronAsarIntegrity` 资源 | 不是它 |
+| electron-builder 改坏了 exe | 用同一个 zip 里的原始 `electron.exe` 做对照：单独跑正常，指向我们的应用就崩 | 不是它 |
 
-一个有力的反证：**第一次打包（不同的 `main.js`）时窗口 10/10 正常出现**。所以不是
-"这台机器跑不了 Electron"，而是"这一次打出来的产物有问题"。
+**真正的原因：产物所在的目录。** 同一份文件、同一个 exe、同样的环境变量：
 
-结论：这两格保持 `TBD`，不接受估算。下一步按可能性排序：
+```text
+D:\el-probe3\...                          → 窗口正常出现
+D:\meowallpaper\el-pristine\...           → 窗口正常出现
+D:\meowallpaper\abcdefghij\…\el-probe\…   → 窗口正常出现
+D:\meowallpaper\Meowallpaper\bench\…      → 崩（换个目录名就不崩，所以不是路径长度）
+```
 
-1. 删掉 `dist` **干净重建**——排除增量打包产出的坏产物；
-2. 仍不行就把 electron 降到上一个稳定大版本，排除新版 Electron 与 electron-builder
-   的兼容问题；
-3. 两条都不解决，就在 README 里如实写"本机无法测量"并保留 `TBD`。
+把 `win-unpacked` 整个搬到 `D:\bench-electron` 之后，**真正的
+`BaselineElectron.exe` 正常启动**，上面那两组数字就是这么测出来的。
+
+**机制没有查明**，只确认了边界：**在项目目录树内启动崩溃，搬出去就正常**。已知被
+排除的：路径长度、工作目录、`ELECTRON_RUN_AS_NODE`、`NODE_COMPILE_CACHE`、组件
+完整性、杀软。要不要继续查是另一个问题——**测量不该被这件事挡住，所以换目录测，并把
+边界写清楚**。
 
 ### 待办
 
-- [x] Electron 基线的**尺寸**（`bench/electron-baseline/`，已打包测量）
-- [ ] Electron 基线的**冷启动 + 空闲内存**（`bench/electron-baseline/measure.ps1`）
-- [ ] 用 §2.3 的新口径（CreateProcess）**复测 MoeWallpaper 冷启动**，替换 41 ms
-- [ ] 网络恢复后复测一次，确认数字可复现
+- [x] Electron 基线的**尺寸**（`bench/electron-baseline/`）
+- [x] Electron 基线的**冷启动 + 空闲内存**（搬到 `D:\bench-electron` 后测）
+- [x] 用 §2.3 的新口径（CreateProcess）**复测 MoeWallpaper 冷启动**，41 ms 已作废
+- [ ] 换一天复测一次，确认数字可复现
+- [ ] （可选）查清"在项目目录树内启动即崩"的机制——不影响数字，但很想知道
 
 ### 记录模板
 
@@ -312,4 +328,4 @@ Defender    默认开启
 | 测内存时进程不见了 | Electron 的 `BrowserWindow` 没被引用，被 GC 后窗口自动关闭，`window-all-closed` 让应用干净退出——**不报错、不留事件日志**，极容易被误判成"程序启动失败" |
 | 冷启动忽快忽慢，慢起来像几秒到十几秒 | 启动命令走 Shell（`Start-Process`）时可能弹「打开文件 - 安全警告」，程序还没创建就在等人点鼠标。改用 `UseShellExecute = $false`（§2.3） |
 | 某个指标每次都不稳定，又说不出规律 | 先怀疑"测量工具污染被测对象"：脚本自己定期跑的东西（枚举进程、轮询磁盘）也会抢 CPU。把诊断性轮询降到 500 ms 级 |
-| 被测程序启动即退，退出码 `-2147483645`（`STATUS_BREAKPOINT`），stderr 为空、WER 也没有记录 | 这一类症状**没有单一因果**，必须逐条实验排除：① Shell 弹窗占用了计时（§2.3）；② 第三方杀软注入/拦截——**本例暂停卡巴后仍崩，已排除**；③ 打包产物本身损坏——先做干净重建。凭感觉定一个原因是最容易出错的做法 |
+| 被测程序启动即退，退出码 `-2147483645`（`STATUS_BREAKPOINT`），stderr 为空、WER 也没有记录 | 这一类症状**没有单一因果**，必须逐条实验排除。本机实测到的一个原因：**产物放在项目目录树内**就会崩，搬到 `D:\bench-electron` 就正常（路径长度、工作目录、`ELECTRON_RUN_AS_NODE`、`NODE_COMPILE_CACHE`、组件完整性、杀软都已排除）。换目录再测，并把边界写进记录 |

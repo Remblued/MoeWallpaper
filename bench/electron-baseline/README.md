@@ -28,12 +28,19 @@ npx electron-builder --win nsis
 `connect ETIMEDOUT 20.205.243.166:443` 和 `The server aborted pending request`，
 说明工具链下载（electron 压缩包 + NSIS + 7zip）对**链路稳定性**很敏感，重试是有效手段。
 
-**冷启动和空闲内存仍是 `TBD`**：这两项要求启动 GUI 进程，需要在正常的桌面会话里跑
-`measure.ps1`（口径见 `docs/BENCHMARK.md` §2.3 / §2.4）：
+**四个数字都测完了**（口径见 `docs/BENCHMARK.md` §2.3 / §2.4）：
+
+```text
+安装包     121,183,964 B = 115.57 MB
+安装内容   374,097,173 B = 356.77 MB   （dist\win-unpacked，73 个文件）
+冷启动     97–119 ms，中位数 104.5 ms（10 发，空白窗口）
+空闲内存   133.5 MB 私有（3 次：133.5 / 135.4 / 133.2，静置 60 秒，4 个进程）
+```
+
+**必须先搬到项目目录之外再跑**，理由见下面那一节：
 
 ```powershell
-cd bench\electron-baseline
-npx electron-builder --win nsis      # 改过 main.js 就必须重打包
+robocopy dist\win-unpacked D:\bench-electron /MIR
 powershell -ExecutionPolicy Bypass -File .\measure.ps1
 ```
 
@@ -68,25 +75,34 @@ powershell -ExecutionPolicy Bypass -File .\measure.ps1
 这个坑和 Electron 无关，**MoeWallpaper 自己也会中**，见
 [`docs/BENCHMARK.md`](../../docs/BENCHMARK.md) §2.3。
 
-## 未解决：启动即崩，`0x80000003`，而且什么都不留
+## 坑：在项目目录里启动就崩（`0x80000003`，什么都不留）
 
 症状：双击 exe → SmartScreen 拦一次 → 点"仍要运行" → **窗口不出来**。从 PowerShell
 启动时进程在 50–100 ms 内退出，`ExitCode = -2147483645`（`0x80000003`，
 `STATUS_BREAKPOINT`），**stderr 为空**，事件日志和 WER 里**没有任何记录**。
 
-已排除的假设（每条都做了实验，不是"看着不像"）：
+四条假设都被实验推翻：
 
 | 假设 | 实验 | 结果 |
 | --- | --- | --- |
 | Shell 的「无法验证发布者」弹窗吃掉了计时 | 改用 `UseShellExecute = $false` 走 CreateProcess | 弹窗消失，**照旧崩** |
 | 第三方杀软拦截（本机 Kaspersky 21.26 + McAfee 残留） | 暂停卡巴保护后重试 | **照旧崩** |
-| `app.asar` 损坏 / 完整性校验失败 | 手工解析 asar（7,360 B，`main.js` 与仓库一致）；解析 PE 取 `.rsrc`（99,328 B） | 结构正常；**没有** `ElectronAsarIntegrity` 资源，校验不可能失败 |
+| `app.asar` 损坏 / 完整性校验失败 | 手工解析 asar（5 个文件哈希全对）；解析 PE 取 `.rsrc`，里面没有 `ElectronAsarIntegrity` 资源 | 不是它 |
+| electron-builder 改坏了 exe | 拿同一个 zip 里的原始 `electron.exe` 对照：单独跑正常，指向本应用就崩 | 不是它 |
 
-关键反证：**第一次打包时窗口 10/10 正常出现**。所以不是"这台机器跑不了 Electron"，
-而是这一次的产物有问题。
+**真正的原因是产物所在的目录。** 同一份文件、同一个 exe：
 
-下一步：删掉 `dist` 干净重建 → 仍不行就把 electron 降一个大版本 → 再不行就在 README
-里保留 `TBD` 并写明"本机无法测量"。
+```text
+D:\el-probe3\...                          → 窗口正常出现
+D:\meowallpaper\el-pristine\...           → 窗口正常出现
+D:\meowallpaper\abcdefghij\…\el-probe\…   → 窗口正常出现
+D:\meowallpaper\Meowallpaper\bench\…      → 崩（换个目录名就不崩，所以不是路径长度）
+```
 
-**这类问题的排查纪律**：不留痕的闪崩没有单一因果。每排除一条都要写清"用什么实验排除
-的"，否则下次还会从同一个假设重新开始——这一轮已经白跑了两次。
+搬到 `D:\bench-electron` 之后一切正常，上面那四个数字就是这么测出来的。
+
+**机制没有查明，只确认了边界**：在项目目录树内启动会崩，搬出去就正常。已经排除：
+路径长度、工作目录、`ELECTRON_RUN_AS_NODE`、`NODE_COMPILE_CACHE`、组件完整性、杀软。
+
+**排查纪律**：这类不留痕的闪崩没有单一因果。每排除一条都要写清"用什么实验排除的"，
+否则下次还会从同一个假设重新开始——这一轮为此白跑了三次。
