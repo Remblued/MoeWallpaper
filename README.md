@@ -34,7 +34,7 @@ until someone can reproduce it. The method lives in [docs/BENCHMARK.md](docs/BEN
 | Installer size (`.exe`) | **1.69 MB** | TBD | file size of the installer produced by the build |
 | Installed size on disk | **5.19 MB** | TBD | sum of all files under the install directory |
 | Cold start to visible window | **41 ms** (median) | TBD | median of 10 launches, from `Start-Process` to first window |
-| Idle memory (60 s after launch) | TBD | TBD | all app + webview processes, not just the main one |
+| Idle memory (60 s after launch) | **212 MB** (private) | TBD | all app + webview processes, not just the main one |
 
 Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
 Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
@@ -48,10 +48,13 @@ Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
 - **Cold start is *window appears*, not *page rendered*.** The latter is a few
   hundred milliseconds later.
 
-Idle memory and the Electron baseline are still `TBD`: during the first measurement
-the network dropped and the UI sat in its loading state, so the number did not
-describe real use. **Left blank on purpose — a number I do not trust is worse than
-no number.**
+Idle memory is reported as **private** (212 MB), not working set (371 MB) — summing
+working sets double-counts DLL pages shared between the app and WebView2 processes.
+**The Electron baseline is still `TBD`** until that build is packaged.
+
+Worth saying plainly: most of that memory is the WebView2 shell — the GPU process
+alone holds 117 MB private, against 6 MB for our own process. That is not something
+this project can optimise away, and the README should not pretend otherwise.
 
 Two rules keep this honest:
 

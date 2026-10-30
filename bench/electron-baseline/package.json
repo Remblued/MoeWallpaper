@@ -1,0 +1,11 @@
+﻿{
+  "name": "moe-wallpaper-electron-baseline",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "build": {
+    "appId": "com.remblued.baseline",
+    "productName": "BaselineElectron",
+    "win": { "target": "nsis" }
+  }
+}
