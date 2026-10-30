@@ -1,9 +1,10 @@
 {
+  "_comment": "这是一个没有联网的示例，展示 sources/builtin/sources.json 的完整字段。它不会被打包进 exe，只作为写新图源时的模板。",
   "schemaVersion": 1,
   "sources": [
     {
       "id": "example",
-      "name": "示例图源",
+      "name": "示例图源（不可用）",
       "enabled": false,
       "homepage": "https://example.invalid/",
       "request": {
@@ -17,8 +18,7 @@
         "itemsPath": "data",
         "imageUrl": "file_url",
         "thumbnailUrl": "sample_url",
-        "pageUrl": "post_url",
-        "tags": "tags"
+        "pageUrl": "post_url"
       },
       "filter": {
         "sfwOnly": true

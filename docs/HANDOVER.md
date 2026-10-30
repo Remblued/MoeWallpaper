@@ -43,16 +43,17 @@
 | 下载缓存 | 命中就不联网，原子写入 | `src-tauri/src/wallpaper/download.rs` |
 | 设壁纸 | Win32 `SystemParametersInfoW` 手工 FFI | `src-tauri/src/wallpaper/set.rs` |
 | 当前壁纸 | 复制到固定的 `current.jpg`，与缓存解耦 | `src-tauri/src/wallpaper/current.rs` |
-| 三个命令 | `list_sources` / `fetch_images` / `set_wallpaper` | `src-tauri/src/commands/mod.rs` |
+| 四个命令 | `list_sources` / `fetch_images` / `set_wallpaper` / `save_image` | `src-tauri/src/commands/mod.rs` |
+| 真实图源 | wallhaven / nekos.best / lolicon，全部免费、无需 API key | `sources/builtin/sources.json` |
 | 前端 | 图源下拉、缩略图网格、四态、toast | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
 
-**测试：35 个（34 个自动跑，1 个标记 `#[ignore]` 手动跑——它会真的改桌面）。`cargo clippy -D warnings` 零告警。**
+**测试：41 个（40 个自动跑，1 个标记 `#[ignore]` 手动跑——它会真的改桌面）。`cargo clippy -D warnings` 零告警。**
 
 ### 未做（这就是接下来的活）
 
 - ❌ **图片详情页**——最高优先级，见上面「交互铁律」
 - ❌ 主题色 / 半透明
-- ❌ 真实图源（现在只有 `example.invalid` 这个占位，点了必然失败）
+- ❌ 国内图源（现状见 §7 技术债：国内免费接口几乎都是"单图 302"，不是列表）
 - ❌ 定时切换
 - ❌ 图标还是 Tauri 默认 logo
 - ❌ 没有 CI
@@ -110,8 +111,8 @@ Meowallpaper/
 │     ├─ mock.ts               ← 假数据 + USE_MOCK 开关
 │     └─ sources/schema.ts     ← 图源配置的类型（暂时没人 import，别删）
 ├─ sources/
-│  ├─ builtin/example.sources.json      ← 内置图源配置（会被编进 exe）
-│  └─ examples/example.response.json    ← 假 API 响应，测试用
+│  ├─ builtin/sources.json             ← 随应用分发的图源（include_str! 编进 exe）
+│  └─ examples/                        ← 不打包：示例配置模板 + 假 API 响应
 ├─ src-tauri/src/
 │  ├─ lib.rs                   ← 组装：注册命令 + 启动时建缓存目录
 │  ├─ commands/mod.rs          ← 门面层：只有 #[tauri::command]，不做逻辑
@@ -283,6 +284,11 @@ interface ImageDto {
 |---|---|---|
 | **缓存会记住错误**：下载到一张 HTML 错误页，也会被永久当成"这张图"，不会自愈 | `wallpaper/download.rs` | 加「清空缓存」按钮；临时解法：删掉 `%LOCALAPPDATA%\com.remblued.moewallpaper` |
 | `current.jpg` 里可能装着 PNG 数据，靠 Windows 按内容识别格式 | `wallpaper/current.rs` | 如果哪天换壁纸失效，**优先怀疑这里** |
+| **`filter.sfwOnly` 没有任何代码在消费它**——它是"声明"，不是"保护"。真正的 SFW 来自各图源的 URL 参数（`purity=100`、`r18=0`） | `sources/model.rs` | 要么删掉这个字段，要么改成由代码注入安全参数（见 §7 末） |
+| 国内免费接口几乎都是"单图 302 / 直接返回一张图"，不是列表；本项目 schema 只吃列表 | `sources/model.rs` | 要支持单图源，得加一种 source 类型（v0.4 插件化时一起做） |
+| 360 壁纸有动漫分类（`cid=26`），但**不是公开 API**，条款不明，而且 `start` 是偏移量不是页码 | — | 用户要国内源时再单独评估，别默认塞进去 |
+| nekos.best 和 lolicon 不提供缩略图，网格会直接加载原图（一张 2–4MB） | `sources/builtin/sources.json` | 要么限制每页数量，要么后端生成缩略图 |
+| `{page}` 只能填页码，不支持偏移量分页（`start=(page-1)*limit`） | `sources/fetch.rs` | 加一个 `{offset}` 占位符，约 3 行 |
 | mock 用的是 `placehold.co`，断网就一片"加载失败" | `src/lib/mock.ts` | 换成本地 data-URI SVG |
 | 前端类型是手抄 Rust 结构体，改一边不会同步另一边 | `lib/api.ts` ↔ `dto.rs` | 结构体超过 5 个时考虑 `ts-rs` 自动生成 |
 | `src/lib/sources/schema.ts` 暂时没人 import | — | 做图源编辑功能时会用到，别当垃圾删了 |

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "wallhaven",
+      "name": "Wallhaven · 动漫",
+      "enabled": true,
+      "homepage": "https://wallhaven.cc/",
+      "request": {
+        "url": "https://wallhaven.cc/api/v1/search?categories=010&purity=100&sorting=random&page={page}",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "itemsPath": "data",
+        "imageUrl": "path",
+        "thumbnailUrl": "thumbs.large",
+        "pageUrl": "url"
+      },
+      "filter": {
+        "sfwOnly": true
+      }
+    },
+    {
+      "id": "nekos-best",
+      "name": "nekos.best · 二次元",
+      "enabled": true,
+      "homepage": "https://nekos.best/",
+      "request": {
+        "url": "https://nekos.best/api/v2/neko?amount={limit}",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "itemsPath": "results",
+        "imageUrl": "url",
+        "pageUrl": "source_url"
+      },
+      "filter": {
+        "sfwOnly": true
+      }
+    },
+    {
+      "id": "lolicon",
+      "name": "Lolicon · Pixiv",
+      "enabled": true,
+      "homepage": "https://api.lolicon.app/",
+      "request": {
+        "url": "https://api.lolicon.app/setu/v2?num={limit}&r18=0&p={page}",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "itemsPath": "data",
+        "imageUrl": "urls.original"
+      },
+      "filter": {
+        "sfwOnly": true
+      }
+    }
+  ]
+}

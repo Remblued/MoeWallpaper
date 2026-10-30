@@ -110,14 +110,13 @@ mod tests {
     /// 保留给"保证不存在"的域名），所以这条测试**不依赖真实网络**，也不会被墙。
     ///
     /// 它验证两件事：坏地址必须返回 `Err`，且错误信息里带请求地址。
+    ///
+    /// 注意这里**自己拼一个图源**，不去读 `sources/builtin/sources.json`。
+    /// 原因：内置图源是真实可用的 API，测试不该依赖它们的死活；
+    /// 而这个测试要的是一个保证失败的东西。
     #[tokio::test]
-    async fn example_source_fails_with_readable_error() {
-        let source = crate::sources::loader::load_builtin()
-            .unwrap()
-            .sources
-            .into_iter()
-            .find(|s| s.id == "example")
-            .unwrap();
+    async fn unreachable_source_fails_with_readable_error() {
+        let source = test_source("https://example.invalid/api?page={page}");
 
         let result = fetch_source_images(&source, 1).await;
 
@@ -129,5 +128,45 @@ mod tests {
             message.contains("example.invalid"),
             "错误信息里必须包含请求地址，实际是：{message:?}"
         );
+    }
+
+    /// 非 GET 的图源必须在**发出请求之前**就被拦下。
+    ///
+    /// 这条测试不碰网络，所以永远稳定。
+    #[tokio::test]
+    async fn non_get_source_is_rejected_before_sending() {
+        let mut source = test_source("https://example.invalid/");
+        source.request.method = Some("POST".to_string());
+
+        let message = fetch_source_images(&source, 1).await.unwrap_err();
+
+        assert!(
+            message.contains("POST"),
+            "错误里要说明是哪个方法：{message:?}"
+        );
+    }
+
+    fn test_source(url: &str) -> WallpaperSource {
+        use crate::sources::model::{HttpRequestSpec, ResponseMapping};
+
+        WallpaperSource {
+            id: "test".to_string(),
+            name: "test".to_string(),
+            enabled: true,
+            homepage: None,
+            request: HttpRequestSpec {
+                url: url.to_string(),
+                method: None,
+                headers: std::collections::HashMap::new(),
+            },
+            response: ResponseMapping {
+                items_path: None,
+                image_url: "url".to_string(),
+                thumbnail_url: None,
+                page_url: None,
+                tags: None,
+            },
+            filter: Default::default(),
+        }
     }
 }
