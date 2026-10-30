@@ -472,3 +472,42 @@ body.detail-open {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent);
 }
+
+/* ── 翻页 ─────────────────────────────────────────────────── */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px 0 8px;
+}
+
+.pager-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  color: var(--fg);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pager-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pager-label {
+  min-width: 72px;
+  text-align: center;
+  font-size: 0.9rem;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}

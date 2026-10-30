@@ -31,6 +31,13 @@
       <!-- 缩略图网格 -->
       <div id="grid" class="grid"></div>
 
+      <!-- 翻页。没有它一页只有 20 来张，后面的图永远看不到 -->
+      <nav class="pager" aria-label="翻页">
+        <button id="prev-page" class="pager-btn" type="button" disabled>← 上一页</button>
+        <span id="page-label" class="pager-label">第 1 页</span>
+        <button id="next-page" class="pager-btn" type="button" disabled>下一页 →</button>
+      </nav>
+
       <!-- 操作反馈 toast -->
       <div id="toast" class="toast" hidden></div>
     </main>

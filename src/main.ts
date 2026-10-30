@@ -16,6 +16,9 @@ const searchInput  = document.getElementById("search-input") as HTMLInputElement
 const statusEl     = document.getElementById("status") as HTMLParagraphElement;
 const gridEl       = document.getElementById("grid") as HTMLDivElement;
 const toastEl      = document.getElementById("toast") as HTMLDivElement;
+const prevBtn      = document.getElementById("prev-page") as HTMLButtonElement;
+const nextBtn      = document.getElementById("next-page") as HTMLButtonElement;
+const pageLabel    = document.getElementById("page-label") as HTMLSpanElement;
 
 // ── 状态 ────────────────────────────────────────────────────
 let currentSourceId = "";
@@ -23,6 +26,8 @@ let currentQuery = "";               // 当前搜索词，空串 = 浏览模式
 let loadSeq = 0;                     // 请求序号，过期响应直接丢弃
 let lastImages: ImageDto[] = [];     // 最近一次渲染的图片列表，供点击处理器读取
 let allSources: WallpaperSource[] = []; // 缓存图源列表，用于判断 search 能力
+let currentPage = 1;                 // 当前页码，从 1 开始
+let hasMorePages = false;            // 上一页拿满了才认为有下一页
 
 // ── 工具 ────────────────────────────────────────────────────
 
@@ -261,7 +266,8 @@ function renderError(err: unknown) {
 }
 
 function renderGrid(images: ImageDto[]) {
-  statusEl.textContent = `共 ${images.length} 张图片`;
+  const pageText = currentPage > 1 ? `第 ${currentPage} 页 · ` : "";
+  statusEl.textContent = `${pageText}共 ${images.length} 张图片`;
   statusEl.className = "status";
 
   gridEl.innerHTML = images
@@ -318,11 +324,31 @@ function updateSearchBoxState() {
   currentQuery = "";
 }
 
+// ── 翻页 ────────────────────────────────────────────────────
+
+/**
+ * 一页至少要有这么多张，才认为后面还有下一页。
+ *
+ * 后端 `DEFAULT_LIMIT` 是 20，wallhaven 的配置是 24。取 20 当门槛：
+ * 拿满 20 张以上就还有下一发的可能；不足 20 张说明已经到底了。
+ * 猜一个数的坏处是可能误判，好处是省掉一次必然为空的请求——
+ * 而且就算误判，下一页拿到空列表也会被下面的逻辑兜住。
+ */
+const FULL_PAGE_HINT = 20;
+
+function updatePager() {
+  prevBtn.disabled = currentPage <= 1;
+  nextBtn.disabled = !hasMorePages;
+  pageLabel.textContent = `第 ${currentPage} 页`;
+}
+
 // ── 加载图片 ────────────────────────────────────────────────
 
-async function loadImages(sourceId: string, query?: string) {
+async function loadImages(sourceId: string, query?: string, page = 1) {
   const seq = ++loadSeq;       // 新请求序号
+  currentPage = page;
   renderLoading();
+  updatePager();
 
   try {
     let images: ImageDto[];
@@ -331,17 +357,30 @@ async function loadImages(sourceId: string, query?: string) {
       await mockDelay();
       images = mockImages();
     } else {
-      images = await fetchImages(sourceId, 1, query || undefined);
+      images = await fetchImages(sourceId, page, query || undefined);
     }
 
     // 过期响应：用户已经切到别的图源了，丢弃
     if (seq !== loadSeq) return;
 
     if (images.length === 0) {
-      renderEmpty(!!query);
+      hasMorePages = false;
+      if (page > 1) {
+        // 翻过头了。退回上一页，并把上一页的图放回去——
+        // 留一个空白网格会让人以为图源坏了。
+        currentPage = page - 1;
+        updatePager();
+        if (lastImages.length > 0) renderGrid(lastImages);
+        showToast("没有更多了");
+      } else {
+        updatePager();
+        renderEmpty(!!query);
+      }
     } else {
       lastImages = images;
+      hasMorePages = images.length >= FULL_PAGE_HINT;
       renderGrid(images);
+      updatePager();
     }
   } catch (err) {
     if (seq !== loadSeq) return;
@@ -392,9 +431,22 @@ async function init() {
     searchInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         currentQuery = searchInput.value.trim();
-        loadImages(currentSourceId, currentQuery || undefined);
+        // 新搜索从第 1 页开始：接着上次的页码会让人以为"这个关键词只有这几张"
+        loadImages(currentSourceId, currentQuery || undefined, 1);
       }
     });
+
+    // 翻页
+    prevBtn.onclick = () => {
+      if (currentPage > 1) {
+        loadImages(currentSourceId, currentQuery || undefined, currentPage - 1);
+      }
+    };
+    nextBtn.onclick = () => {
+      if (hasMorePages) {
+        loadImages(currentSourceId, currentQuery || undefined, currentPage + 1);
+      }
+    };
 
     // 初始化搜索框状态
     updateSearchBoxState();
