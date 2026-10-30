@@ -23,37 +23,30 @@ bundled per app — and three commitments to go with it:
 3. **No bundled images.** This repository contains no wallpaper files. Sources point
    at public APIs; only thumbnails and the current wallpaper are cached, locally.
 
-## Network requirement (read this first)
+## Network requirement
 
-**All three built-in sources are hosted outside mainland China, and none of them is
-reachable from a direct connection here.** This is not a misconfiguration and not an
-open bug — wallhaven, nekos.best and lolicon are all blocked at the carrier or campus
-network level. Someone tested it: with no proxy, all three sources fail to connect.
+**The default source is domestic: install it and you see images, no proxy needed.**
 
-So you need outbound access, for example Clash or v2ray running as a system proxy.
+The first built-in source is the anime category of 360 Wallpaper, reachable on a direct
+connection from mainland China (verified). The other three are hosted abroad
+(wallhaven, nekos.best, lolicon) and **none of them is reachable on a direct
+connection here** — not a misconfiguration and not an open bug, they are cut off at the
+carrier or campus network level. Those three need a proxy.
 
 The app **reads the Windows system proxy setting automatically** (the one under
-"Internet Options"). There is nothing to configure inside the app. If the proxy client
-is running and the system proxy is on, the app uses it.
-
-How to tell whether you are set up:
-
-- your browser can open <https://wallhaven.cc/> → the app can too
-- your browser cannot → the app will fail, but the error carries the status code and
-  **the server's own words**, not just "load failed"
+"Internet Options"); there is nothing to configure inside the app. It is used only when
+reaching the overseas sources.
 
 Three known traps:
 
 - **nekos.best blocks by IP.** It answers 403 with "Your IP address has been
-  automatically blocked by our security system". Shared exit IPs on cheap VPN nodes
-  hit this often; switching node fixes it. Not an app problem.
-- **A proxy client with the system proxy switched off is the same as no proxy.** The
-  app falls back to a direct connection, and we just established that direct does not
-  work.
-- **Domestic sources do not exist yet.** Candidates have been researched and tested,
-  see [docs/SOURCES-CN.md](docs/SOURCES-CN.md): the 360 wallpaper category list works
-  on a direct connection, but wiring it up needs three capabilities first.
-
+  automatically blocked by our security system". Shared exit IPs hit this often;
+  switching node fixes it.
+- **A proxy client with the system proxy switched off is the same as no proxy.**
+- **360 has no content flag.** We pin the anime category (`cid=26`), but unlike
+  wallhaven's `purity` or lolicon's `r18` there is no parameter that guarantees the
+  content. That limitation is written down in [docs/SOURCES-CN.md](docs/SOURCES-CN.md)
+  rather than hidden.
 ## Size, measured not claimed
 
 Every number in this table is produced on one machine, with one method, on the same
@@ -221,18 +214,18 @@ directories, so a folder is created when its first real file is written, not bef
 
 | Version | Scope | Status |
 | --- | --- | --- |
-| `v0.1.0` | The whole feature table above | 🚧 feature-complete, pending release checks |
-| `v0.2.0` | **Domestic (CN) sources** — all three sources are unusable without a proxy | 📋 |
+| `v0.1.1` | **A domestic source that works without a proxy** (360 anime category), plus offset paging, combined-resolution fields and an image https upgrade | ✅ |
+| `v0.2.0` | **Desktop widget** and **user-supplied APIs** | 📋 |
 | `v0.3.0` | Desktop widget (桌面挂件) | 📋 |
 | `v0.4.0` | Pluggable sources, if the declarative format ever stops being enough | 📋 |
 | unscheduled | CI, auto-update, UI i18n, focus trap in the detail view | 📋 |
 
-**On domestic sources**: this is the most important gap right now. The difficulty is
-that most free Chinese endpoints return a single image (a 302 to one picture) rather
-than a list, and this project's source format only reads lists. 360 Wallpaper has an
-anime category, but it is not a public API, its terms are unclear, and its `start`
-parameter is an offset rather than a page number. Supporting that shape means adding a
-second kind of source, which is what v0.2.0 is for.
+`v0.1.1` is the domestic source that was originally scheduled for `v0.2.0`. Without it
+the app is empty on first launch inside mainland China, which outranks any new feature.
+`v0.2.0` therefore moves to two different things: a desktop widget, and letting users
+plug in their own API without waiting for us to add a source.
+
+No `v0.1.0` tag was ever published, so `v0.1.1` is the first genuinely usable release.
 
 Scope may shrink. Versions are cut when the previous one is genuinely usable.
 

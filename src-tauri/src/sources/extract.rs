@@ -21,6 +21,14 @@ fn get_by_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     Some(current)
 }
 
+/// 把 `"2560x1440"` 拆成 `(2560, 1440)`。
+///
+/// 有的接口不给分开的宽高字段，只给一个合在一起的字符串（360 壁纸就是这样）。
+/// 大小写的 `x` 都认——这种字段是人工填的，两种写法混用很常见。
+fn parse_resolution(value: &str) -> Option<(u32, u32)> {
+    let (w, h) = value.split_once(['x', 'X'])?;
+    Some((w.trim().parse().ok()?, h.trim().parse().ok()?))
+}
 /// 从响应里提取出来的一条图片引用。
 #[derive(Debug, PartialEq)]
 pub struct ImageRef {
@@ -80,6 +88,14 @@ pub fn extract_images(
             continue;
         };
 
+        // 先试分开的宽高字段，没有再退回合在一起的 `resolution`。
+        // 反过来会让字符串盖掉更精确的数字字段。
+        let combined = mapping
+            .resolution
+            .as_deref()
+            .and_then(|p| string_at(item, p))
+            .and_then(parse_resolution);
+
         out.push(ImageRef {
             image_url: image_url.to_string(),
             thumbnail_url: mapping
@@ -92,8 +108,16 @@ pub fn extract_images(
                 .as_deref()
                 .and_then(|path| string_at(item, path))
                 .map(str::to_string),
-            width: mapping.width.as_deref().and_then(|p| number_at(item, p)),
-            height: mapping.height.as_deref().and_then(|p| number_at(item, p)),
+            width: mapping
+                .width
+                .as_deref()
+                .and_then(|p| number_at(item, p))
+                .or(combined.map(|(w, _)| w)),
+            height: mapping
+                .height
+                .as_deref()
+                .and_then(|p| number_at(item, p))
+                .or(combined.map(|(_, h)| h)),
         });
     }
 
@@ -122,6 +146,7 @@ mod tests {
             tags: Some("tags".to_string()),
             width: Some("width".to_string()),
             height: Some("height".to_string()),
+            resolution: None,
         }
     }
 
@@ -253,5 +278,52 @@ mod tests {
         let images = extract_images(&map, &v).unwrap();
 
         assert_eq!((images[0].width, images[0].height), (None, None));
+    }
+
+    #[test]
+    fn combined_resolution_string_is_split() {
+        let mut map = mapping("data");
+        map.width = None;
+        map.height = None;
+        map.resolution = Some("resolution".to_string());
+
+        let v = serde_json::json!({"data":[
+            {"file_url":"a","resolution":"2560x1440"},
+            {"file_url":"b","resolution":"1920X1080"},
+            {"file_url":"c","resolution":"nope"},
+            {"file_url":"d"}
+        ]});
+        let images = extract_images(&map, &v).unwrap();
+
+        assert_eq!(
+            (images[0].width, images[0].height),
+            (Some(2560), Some(1440))
+        );
+        // 大写的 X 也要认：这种字段是人手填的
+        assert_eq!(
+            (images[1].width, images[1].height),
+            (Some(1920), Some(1080))
+        );
+        assert_eq!((images[2].width, images[2].height), (None, None));
+        assert_eq!((images[3].width, images[3].height), (None, None));
+    }
+
+    #[test]
+    fn separate_dimension_fields_win_over_resolution() {
+        let mut map = mapping("data");
+        map.width = Some("w".to_string());
+        map.height = Some("h".to_string());
+        map.resolution = Some("resolution".to_string());
+
+        let v = serde_json::json!({"data":[
+            {"file_url":"a","w":3840,"h":2160,"resolution":"1920x1080"}
+        ]});
+        let images = extract_images(&map, &v).unwrap();
+
+        // 分开的字段更精确，不能被合在一起的字符串盖掉
+        assert_eq!(
+            (images[0].width, images[0].height),
+            (Some(3840), Some(2160))
+        );
     }
 }

@@ -43,6 +43,8 @@ export interface ResponseMapping {
   width?: string;
   /** 原图高度的字段路径；规则同 `width`。 */
   height?: string;
+  /** 合在一起的尺寸字段，形如 `"2560x1440"`；配了 width/height 时以后者为准。 */
+  resolution?: string;
 }
 
 /**

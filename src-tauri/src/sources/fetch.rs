@@ -72,8 +72,13 @@ fn build_request(
 /// 配置是静态 JSON，不能在 JSON 里做运算，所以占位符由代码替换。
 /// 不做这一步，请求会带着字面量 `{page}` 发出去，服务器直接 400。
 pub fn substitute_placeholders(url: &str, page: u32, limit: u32) -> String {
+    // 偏移量分页的接口（360 壁纸）要的是 `start=0/20/40`，不是页码。
+    // 让配置写 `{offset}`、由代码算，配置本身就不用做算术。
+    let offset = page.saturating_sub(1).saturating_mul(limit);
+
     url.replace("{page}", &page.to_string())
         .replace("{limit}", &limit.to_string())
+        .replace("{offset}", &offset.to_string())
 }
 
 /// 把图源声明的安全参数拼到地址末尾。
@@ -183,8 +188,29 @@ pub async fn fetch_source_images(
         .map_err(|e| format!("解析 {} 的 JSON 失败: {}", url, e))?;
 
     // 提取
-    crate::sources::extract::extract_images(&source.response, &value)
-        .map_err(|e| format!("从 {} 提取图片失败: {}", url, e))
+    let mut images = crate::sources::extract::extract_images(&source.response, &value)
+        .map_err(|e| format!("从 {} 提取图片失败: {}", url, e))?;
+
+    // 图片地址的 http→https 升级。为什么需要见 `SourceFilter::https_upgrade`。
+    if source.filter.https_upgrade {
+        for img in &mut images {
+            img.image_url = upgrade_to_https(&img.image_url);
+            img.thumbnail_url = img.thumbnail_url.as_deref().map(upgrade_to_https);
+        }
+    }
+
+    Ok(images)
+}
+
+/// 把 `http://` 开头的地址升级成 `https://`。
+///
+/// 已经是 https、或根本不是 http 地址的，原样返回——不猜、不改写别的东西。
+/// 只替换协议前缀，所以 `http://` 出现在路径里（很少见）也不会被误伤。
+fn upgrade_to_https(url: &str) -> String {
+    match url.strip_prefix("http://") {
+        Some(rest) => format!("https://{rest}"),
+        None => url.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -212,6 +238,7 @@ mod tests {
     fn filter(query: Option<&str>) -> SourceFilter {
         SourceFilter {
             sfw_query: query.map(str::to_string),
+            https_upgrade: false,
         }
     }
 
@@ -315,6 +342,7 @@ mod tests {
                 tags: None,
                 width: None,
                 height: None,
+                resolution: None,
             },
             filter: Default::default(),
             search: None,
@@ -403,5 +431,76 @@ mod tests {
             Ok(resp) => println!("状态码 = {}", resp.status()),
             Err(e) => println!("请求失败 = {e}"),
         }
+    }
+
+    /// 手动跑：`cargo test -- --ignored --nocapture live_360`
+    ///
+    /// 一次覆盖三件事：`{offset}` 替换对不对、`resolution` 能不能拆、http 图片有没有
+    /// 被升级成 https。这三件任何一件错了，界面都会表现为"列表拿到了但图全是裂的"，
+    /// 而单元测试各自只测其中一件。
+    #[tokio::test]
+    #[ignore]
+    async fn live_360_source_works_end_to_end() {
+        let sources = crate::sources::loader::load_builtin().unwrap();
+        let src = sources
+            .sources
+            .iter()
+            .find(|s| s.id == "360")
+            .expect("内置图源里应该有 360");
+
+        let images = fetch_source_images(src, 1, None)
+            .await
+            .expect("请求应当成功");
+        println!("拿到 {} 张", images.len());
+        for img in images.iter().take(3) {
+            println!(
+                "  {}  {}x{:?}",
+                img.image_url,
+                img.width.unwrap_or(0),
+                img.height
+            );
+        }
+
+        assert!(!images.is_empty(), "360 应该返回图片");
+        assert!(
+            images.iter().all(|i| i.image_url.starts_with("https://")),
+            "http 图片必须被升级成 https，否则 WebView 不会加载"
+        );
+        assert!(
+            images.iter().any(|i| i.width.is_some()),
+            "resolution 字段应该被拆成宽高"
+        );
+    }
+
+    #[test]
+    fn offset_starts_at_zero_and_steps_by_limit() {
+        let u = "https://a.com/p?start={offset}&count={limit}";
+        assert!(substitute_placeholders(u, 1, 20).contains("start=0"));
+        assert!(substitute_placeholders(u, 3, 20).contains("start=40"));
+    }
+
+    #[test]
+    fn offset_never_underflows() {
+        // page=0 是非法的，但也不能因为 u32 下溢而崩
+        let url = substitute_placeholders("https://a.com/p?start={offset}", 0, 20);
+        assert!(url.contains("start=0"), "{url}");
+    }
+
+    #[test]
+    fn https_upgrade_only_touches_the_scheme() {
+        assert_eq!(
+            upgrade_to_https("http://p3.qhimg.com/a.jpg"),
+            "https://p3.qhimg.com/a.jpg"
+        );
+        assert_eq!(
+            upgrade_to_https("https://a.com/a.jpg"),
+            "https://a.com/a.jpg"
+        );
+        assert_eq!(upgrade_to_https("ftp://a.com/a.jpg"), "ftp://a.com/a.jpg");
+        // 协议后面的内容一个字都不能动
+        assert_eq!(
+            upgrade_to_https("http://a.com/http://b.jpg"),
+            "https://a.com/http://b.jpg"
+        );
     }
 }

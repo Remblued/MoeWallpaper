@@ -22,7 +22,7 @@
 
 | 候选 | 状态 | 结论 |
 | --- | --- | --- |
-| **360 壁纸 `getAppsByCategory`** | 200 / JSON / 20 条 | ✅ **可用**，详见 §2 |
+| **360 壁纸 `getAppsByCategory`** | 200 / JSON / 20 条 | ✅ **已于 v0.1.1 接入**，详见 §2 |
 | Bing 每日归档 `cn.bing.com/HPImageArchive.aspx` | 200 / JSON / 8 条 | ⚠️ 可用但**不接**，详见 §3 |
 | 极简壁纸 `api.zzzmh.cn/bz/getList` | 404 | ❌ 端点已废 |
 | `api.dujin.org/bing/1920.php` | 521 | ❌ 不可用 |
@@ -116,8 +116,16 @@ http://wallpaper.apc.360.cn/index.php
 
 ## 6. 结论与下一步
 
-**接 360，但先补那三处能力**（`{offset}`、`resolution`、`httpsUpgrade`），
-再写 `sources/builtin/sources.json` 里的一条配置，配 3 个测试：
+**已完成（v0.1.1）**：三处能力都补上了，360 排在 `sources/builtin/sources.json` 的第一位，
+所以**打开应用默认就是国内源，不需要代理**。
+
+新增的图源配置能力：
+
+- `{offset}` 占位符：`start=(page-1)*limit`，配置里不用做算术
+- `resolution` 字段：把 `"2560x1440"` 拆成宽高；同时配了 `width`/`height` 时以那两个为准
+- `filter.httpsUpgrade`：把图片地址的 `http://` 换成 `https://`，否则 WebView 不会加载
+
+落地时配的测试：
 
 - `start` 随页码正确递增（不是等于页码）
 - `"2560x1440"` 能被拆成 2560 / 1080

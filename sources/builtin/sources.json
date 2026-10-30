@@ -2,6 +2,29 @@
   "schemaVersion": 1,
   "sources": [
     {
+      "id": "360",
+      "name": "360 壁纸 · 动漫卡通",
+      "enabled": true,
+      "homepage": "http://wallpaper.360.cn/",
+      "request": {
+        "url": "http://wallpaper.apc.360.cn/index.php?c=WallPaper&a=getAppsByCategory&from=360chrome&cid=26&start={offset}&count={limit}",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "itemsPath": "data",
+        "imageUrl": "url",
+        "thumbnailUrl": "url_thumb",
+        "resolution": "resolution",
+        "tags": "utag"
+      },
+      "filter": {
+        "httpsUpgrade": true
+      }
+    },
+    {
       "id": "wallhaven",
       "name": "Wallhaven · 动漫",
       "enabled": true,

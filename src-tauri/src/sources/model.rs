@@ -37,6 +37,11 @@ pub struct ResponseMapping {
     pub width: Option<String>,
     /// 原图高度的字段路径。规则同 `width`。
     pub height: Option<String>,
+    /// **合在一起**的尺寸字段路径，形如 `"2560x1440"`。
+    ///
+    /// 有些接口不分开给宽高，只给一个 `resolution` 字符串（360 壁纸就是这样）。
+    /// 配了它，代码会拆成宽高；同时配了 `width`/`height` 时以那两个为准。
+    pub resolution: Option<String>,
 }
 
 /// 图源的附加过滤。
@@ -58,6 +63,15 @@ pub struct SourceFilter {
     /// 写在这里而不是直接塞进 `request.url`，是为了让"安全"这件事在配置里
     /// 一眼可见，而且加图源的人不会忘。
     pub sfw_query: Option<String>,
+    /// 把图片地址从 `http://` 升级成 `https://`。
+    ///
+    /// **为什么必须有这个开关**：有的接口（360 壁纸）只支持 http，但它返回的图片
+    /// 在 https 下同样能取到。而界面跑在安全上下文里，WebView 不会加载 http 图片——
+    /// 表现出来就是"列表拿到了，图全是裂的"，且控制台里只有一行 mixed content 警告。
+    ///
+    /// 只作用于图片和缩略图；页面链接不改，它是要交给浏览器打开的。
+    #[serde(default)]
+    pub https_upgrade: bool,
 }
 
 /// 搜索能力。

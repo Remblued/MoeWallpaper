@@ -1,7 +1,7 @@
 {
   "name": "moe-wallpaper",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lightweight anime wallpaper app for Windows (Tauri 2 + vanilla TypeScript)",
   "license": "MIT",
   "type": "module",
