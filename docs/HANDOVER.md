@@ -404,6 +404,8 @@ export async function fetchImages(
 | 测试**单独跑通过、一起跑失败** | `cargo test` 默认并行，两个测试共用了临时目录/端口 | 每个测试的目录名加自己的标识 |
 | `! [rejected] main -> main (fetch first)` | 远端有你没有的提交 | `git fetch` → `git log --oneline origin/main ^main` 看清 → `git pull --rebase` → 再 push。**别 `--force`** |
 | `Recv failure: Connection was reset`（`git push/fetch`） | 本机代理节点不稳，**不是 git 配置问题** | 换节点 / 稍后重试；`D:\meowallpaper\push-retry.ps1` 会自动重试 |
+| **所有图源一起加载失败 / 连接超时** | 三个内置图源全在海外，**没开系统代理就一个都连不上**。程序会读 Windows 系统代理（`src-tauri/src/net.rs`），但读不到就不走代理 | 确认代理软件在跑、系统代理开着；浏览器能开 wallhaven 就是配好了 |
+| 某个图源 403，正文写着 IP 被拉黑 | nekos.best 按出口 IP 封禁，机场共享 IP 常见 | 换节点，改代码没用 |
 | 界面点了没反应 | 前端运行时异常，不是 Rust 崩了 | 窗口里 `F12` 看 Console 第一行红字 |
 | 打包好的 exe 双击不弹窗、也不出界面；PowerShell 启动则几十毫秒就退出，退出码 `-2147483645`，事件日志和 WER 都干净 | **不是你的代码**。装了第三方杀软（本机是 Kaspersky 21.26，`KLIF`/`klflt` 内核驱动 hook 进程创建），未签名的构建会被它拦掉。先看 `root/SecurityCenter2` 和运行中的过滤驱动 | 把项目目录加进杀软排除项，或临时暂停防护。测量时两个基线要在同一防护状态下跑 |
 

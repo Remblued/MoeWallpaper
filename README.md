@@ -16,12 +16,42 @@ app whose main job is "show a grid of images and set one as the wallpaper".
 MoeWallpaper makes one bet — a wallpaper app does not need a full browser runtime
 bundled per app — and three commitments to go with it:
 
-1. **Small install.** Measured at **1.69 MB**, not estimated. See
+1. **Small install.** Measured at **1.81 MB**, not estimated. See
    [Size, measured not claimed](#size-measured-not-claimed).
 2. **Sources are data, not code.** Adding an image source means editing a JSON file.
    There is no plugin runtime, no scripting layer, no per-source native module.
 3. **No bundled images.** This repository contains no wallpaper files. Sources point
    at public APIs; only thumbnails and the current wallpaper are cached, locally.
+
+## Network requirement (read this first)
+
+**All three built-in sources are hosted outside mainland China, and none of them is
+reachable from a direct connection here.** This is not a misconfiguration and not an
+open bug — wallhaven, nekos.best and lolicon are all blocked at the carrier or campus
+network level. Someone tested it: with no proxy, all three sources fail to connect.
+
+So you need outbound access, for example Clash or v2ray running as a system proxy.
+
+The app **reads the Windows system proxy setting automatically** (the one under
+"Internet Options"). There is nothing to configure inside the app. If the proxy client
+is running and the system proxy is on, the app uses it.
+
+How to tell whether you are set up:
+
+- your browser can open <https://wallhaven.cc/> → the app can too
+- your browser cannot → the app will fail, but the error carries the status code and
+  **the server's own words**, not just "load failed"
+
+Three known traps:
+
+- **nekos.best blocks by IP.** It answers 403 with "Your IP address has been
+  automatically blocked by our security system". Shared exit IPs on cheap VPN nodes
+  hit this often; switching node fixes it. Not an app problem.
+- **A proxy client with the system proxy switched off is the same as no proxy.** The
+  app falls back to a direct connection, and we just established that direct does not
+  work.
+- **Domestic sources do not exist yet.** That is the biggest gap in this project; see
+  [Roadmap](#roadmap).
 
 ## Size, measured not claimed
 
@@ -31,12 +61,12 @@ measured, there is no `TBD` left**. The method lives in [docs/BENCHMARK.md](docs
 
 | Metric | MoeWallpaper | Minimal Electron app | How it is measured |
 | --- | --- | --- | --- |
-| Installer size (`.exe`) | **1.69 MB** | **115.57 MB** | file size of the installer produced by the build |
-| Installed size on disk | **5.19 MB** | **356.77 MB** | sum of all files under the install directory |
+| Installer size (`.exe`) | **1.81 MB** | **115.57 MB** | file size of the installer produced by the build |
+| Installed size on disk | **5.38 MB** | **356.77 MB** | sum of all files under the install directory |
 | Cold start to visible window | **17.5 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
 | Idle memory (60 s after launch) | **218 MB** (private) | **133.5 MB** (private) | all app + webview processes, not just the main one |
 
-The installer is **about 68× smaller** (115.57 MB versus 1.69 MB) and cold start is
+The installer is **about 64× smaller** (115.57 MB versus 1.81 MB) and cold start is
 **about 6× faster**.
 
 Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
@@ -47,7 +77,7 @@ Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
 
 - **The installer does not include the WebView2 runtime.** Windows 11 ships it;
   Windows 10 downloads roughly 100 MB on first install. So this is not
-  "1.69 MB everywhere".
+  "1.81 MB everywhere".
 - **Cold start is *window appears*, not *page rendered*.** The latter is a few
   hundred milliseconds later.
 
@@ -61,7 +91,7 @@ Chromium holds the same blank page in 133.5 MB. **It is written down here rather
 softened.**
 
 That 356.77 MB is not padding either: a single file, `BaselineElectron.exe`, is
-238.23 MB — 46× the entire installed footprint of this project (5.19 MB).
+238.23 MB — 44× the entire installed footprint of this project (5.38 MB).
 
 That 117 MB GPU process is not something this project can optimise away, and no amount
 of work on image loading would move it — the memory is not on our side of the fence.
@@ -77,19 +107,30 @@ Two rules keep this honest:
 
 ## Features (v0.1.0)
 
-| | Feature | Status |
-| --- | --- | --- |
-| 1 | Fetch images from declarative JSON sources | 🚧 |
-| 2 | Thumbnail grid | 🚧 |
-| 3 | Set as wallpaper in one click | 🚧 |
-| 4 | Scheduled rotation | 🚧 |
-| 5 | JSON source configuration | 🚧 |
-| — | Scaffold (Tauri 2 + Vite + TypeScript) | ✅ |
+| Feature | Status |
+| --- | --- |
+| Fetch from declarative JSON sources (wallhaven / nekos.best / lolicon) | ✅ |
+| Thumbnail grid with skeleton and broken-image fallback | ✅ |
+| Detail view: full image, set as wallpaper, download, open source page | ✅ |
+| Keyword search (Chinese tag dictionary, per-source search endpoints) | ✅ |
+| Pagination | ✅ |
+| Resolution filter (≥1080p / ≥1440p / ≥4K) | ✅ |
+| Dark / light theme, remembered | ✅ |
+| One-click wallpaper (Win32 `SystemParametersInfo`) | ✅ |
+| Save to Pictures without overwriting | ✅ |
+| Local cache (thumbnails, current wallpaper) | ✅ |
+| Declarative JSON sources | ✅ |
+| Domestic (CN) sources | 📋 see [Roadmap](#roadmap) |
+| Scheduled rotation | ❌ deliberately cut, see below |
 
 ### Not in v0.1.0
 
-Search, favourites, accounts, cloud sync, auto-update, multi-monitor. Being small is
-the feature; anything not on the list above is deliberately postponed.
+Favourites, accounts, cloud sync, auto-update, multi-monitor, scheduled rotation.
+Being small is the feature; anything not listed above is deliberately postponed.
+
+**Scheduled rotation was cut on purpose**, not left unfinished: it needs a resident
+timer and a "go to the next one" state machine, while keyword search solves the same
+want — "show me this kind of picture" — with far less code and far fewer edge cases.
 
 ## Declarative sources
 
@@ -179,11 +220,18 @@ directories, so a folder is created when its first real file is written, not bef
 
 | Version | Scope | Status |
 | --- | --- | --- |
-| `v0.1.0` | The five features above | 🚧 |
-| `v0.2.0` | Desktop widget (桌面挂件) | 📋 |
-| `v0.3.0` | Desktop tidy-up (桌面整理) | 📋 |
+| `v0.1.0` | The whole feature table above | 🚧 feature-complete, pending release checks |
+| `v0.2.0` | **Domestic (CN) sources** — all three sources are unusable without a proxy | 📋 |
+| `v0.3.0` | Desktop widget (桌面挂件) | 📋 |
 | `v0.4.0` | Pluggable sources, if the declarative format ever stops being enough | 📋 |
-| unscheduled | CI, auto-update, UI i18n | 📋 |
+| unscheduled | CI, auto-update, UI i18n, focus trap in the detail view | 📋 |
+
+**On domestic sources**: this is the most important gap right now. The difficulty is
+that most free Chinese endpoints return a single image (a 302 to one picture) rather
+than a list, and this project's source format only reads lists. 360 Wallpaper has an
+anime category, but it is not a public API, its terms are unclear, and its `start`
+parameter is an offset rather than a page number. Supporting that shape means adding a
+second kind of source, which is what v0.2.0 is for.
 
 Scope may shrink. Versions are cut when the previous one is genuinely usable.
 
