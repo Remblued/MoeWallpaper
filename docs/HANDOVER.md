@@ -52,8 +52,7 @@
 
 ### 未做（这就是接下来的活）
 
-- ❌ **图片详情页**——最高优先级，见上面「交互铁律」
-- ❌ 主题色 / 半透明
+- ❌ 主题色 / 半透明（B7 / B8，界面活里只剩这两项）
 - ❌ 国内图源（现状见 §7 技术债：国内免费接口几乎都是"单图 302"，不是列表）
 - ❌ 定时切换
 - ❌ 没有 CI
@@ -291,11 +290,21 @@ interface ImageDto {
 | B2 | `src/lib/mock.ts` 假数据 | ✅ |
 | B3 | 缩略图网格 | ✅ |
 | B4 | 四态：加载中 / 空 / 出错 | ✅ |
-| B5 | 点击 → 调 `set_wallpaper` | ⚠️ **做错了**，见 B6 |
-| **B6** | **图片详情页**——最高优先级 | ⬜ |
+| B5 | 点击 → 调 `set_wallpaper` | ✅ **已被 B6 取代**：点击现在打开详情页，不再直接换桌面 |
+| **B6** | **图片详情页** | ✅ `5790aad` |
 | **B7** | 主题色 | ⬜ |
 | **B8** | 半透明 | ⬜ |
-| **B9** | 搜索框 | ⬜ |
+| **B9** | 搜索框 | ✅ `5790aad` |
+
+**B6 / B9 的合并记录（2026-10-30，`1a89bfb`）**
+
+B 这次是用 `git push` 交的分支 `feat/b-batch-oct30` + PR，不是网页上传，照规矩做的。
+合并前逐行看过，规格里的硬要求都在：三个关闭方式（× / Esc / 点遮罩）、加载失败仍可
+关闭、`enabled !== false` 过滤、`query` 可选不破坏旧调用、离线 data-URI mock。
+
+审出一个缺陷并已单独修（`ec6f43c`）：`handleSetWallpaper` 只在 catch 里恢复按钮，
+成功后会永远停在「设置中…」的禁用态。`handleDownload` 原本就用 `finally` 写对了，
+所以改成一致而不是再加一种写法。
 
 ### B9 搜索框
 
@@ -366,10 +375,10 @@ export async function fetchImages(
 | 360 壁纸有动漫分类（`cid=26`），但**不是公开 API**，条款不明，而且 `start` 是偏移量不是页码 | — | 用户要国内源时再单独评估，别默认塞进去 |
 | nekos.best 和 lolicon 不提供缩略图，网格会直接加载原图（一张 2–4MB） | `sources/builtin/sources.json` | 要么限制每页数量，要么后端生成缩略图 |
 | `{page}` 只能填页码，不支持偏移量分页（`start=(page-1)*limit`） | `sources/fetch.rs` | 加一个 `{offset}` 占位符，约 3 行 |
-| mock 用的是 `placehold.co`，断网就一片"加载失败" | `src/lib/mock.ts` | 换成本地 data-URI SVG |
 | 前端类型是手抄 Rust 结构体，改一边不会同步另一边 | `lib/api.ts` ↔ `dto.rs` | 结构体超过 5 个时考虑 `ts-rs` 自动生成 |
 | `src/lib/sources/schema.ts` 暂时没人 import | — | 做图源编辑功能时会用到，别当垃圾删了 |
 | 并发下载会撑爆内存（一页 24 张 4K ≈ 120MB） | `wallpaper/download.rs` | 做预加载时必须限并发 |
+| 详情页没有焦点陷阱（Tab 能跑到覆盖层后面的元素） | `src/main.ts` | 无障碍完善时再加 `inert` 或焦点循环；不影响键盘关闭 |
 | `ToggleChange.kind` 那种"用 String 当枚举"的写法 | 暂无（参考项目里有） | 见到就改成 `enum` |
 | 没有 CI | — | 等真实图源接上后，加一个跑三道门的 workflow |
 
