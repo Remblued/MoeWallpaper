@@ -23,9 +23,19 @@ const COLORS = [
   "a0e8a0", "e8c4a0",
 ];
 
+/**
+ * 生成本地 data-URI SVG 占位图。
+ * 断网也能用，不依赖任何外部服务。
+ */
 function placeholderUrl(idx: number, size: string): string {
+  const [w, h] = size.split("x").map(Number);
   const bg = COLORS[idx % COLORS.length];
-  return `https://placehold.co/${size}/${bg}/ffffff?text=${idx + 1}`;
+  const label = String(idx + 1);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+    `<rect width="100%" height="100%" fill="#${bg}"/>` +
+    `<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" ` +
+    `font-family="sans-serif" font-size="${Math.round(h / 3)}" fill="#fff">${label}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /** 24 条假 ImageDto，覆盖"有缩略图 / 无 pageUrl"等组合。 */
