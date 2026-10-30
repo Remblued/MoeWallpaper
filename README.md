@@ -63,11 +63,11 @@ measured, there is no `TBD` left**. The method lives in [docs/BENCHMARK.md](docs
 | --- | --- | --- | --- |
 | Installer size (`.exe`) | **1.81 MB** | **115.57 MB** | file size of the installer produced by the build |
 | Installed size on disk | **5.38 MB** | **356.77 MB** | sum of all files under the install directory |
-| Cold start to visible window | **17.5 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
-| Idle memory (60 s after launch) | **218 MB** (private) | **133.5 MB** (private) | all app + webview processes, not just the main one |
+| Cold start to visible window | **29.5 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
+| Idle memory (60 s after launch) | **233 MB** (private) | **133.5 MB** (private) | all app + webview processes, not just the main one |
 
 The installer is **about 64× smaller** (115.57 MB versus 1.81 MB) and cold start is
-**about 6× faster**.
+**about 3.5× faster**.
 
 Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
 Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
@@ -81,10 +81,10 @@ Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
 - **Cold start is *window appears*, not *page rendered*.** The latter is a few
   hundred milliseconds later.
 
-Idle memory is reported as **private** (218 MB), not working set (382 MB) — summing
+Idle memory is reported as **private** (233 MB), not working set (399 MB) — summing
 working sets double-counts DLL pages shared between the app and WebView2 processes.
 
-**This is the metric we lose: 218 MB against 133.5 MB, 85 MB more.** We do not bundle
+**This is the metric we lose: 233 MB against 133.5 MB, 99 MB more.** We do not bundle
 a browser engine; we borrow the system WebView2, which spawns three extra helper
 processes and puts 117 MB private into its GPU process alone. Electron's bundled
 Chromium holds the same blank page in 133.5 MB. **It is written down here rather than
