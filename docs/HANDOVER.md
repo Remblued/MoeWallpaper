@@ -48,7 +48,7 @@
 | 关键词搜索 | 每个图源可声明自己的搜索地址；中文走本地词表翻成英文标签 | `src-tauri/src/sources/search.rs` + `search/terms.json` |
 | 前端 | 图源下拉、缩略图网格、四态、toast | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
 
-**测试：87 个（82 个自动跑，5 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）。`cargo clippy -D warnings` 零告警。**
+**测试：93 个（88 个自动跑，5 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）。`cargo clippy -D warnings` 零告警。**
 
 ### 未做（这就是接下来的活）
 
@@ -430,6 +430,7 @@ export async function fetchImages(
 | 列表能拿到、图全裂；单独取图片地址超时 | 图片域名不通。lolicon 的原始域名 `i.pximg.net` **直连超时**（带不带 `Referer` 都一样） | 把图片域名钉到 `i.pixiv.re`（配置里 `proxy=i.pixiv.re`，有测试守着）。实测 `i.pixiv.re`/`i.pixiv.nl` 4/4 可用 |
 | 搜一个不存在的词 → 显示"没有结果"而不是报错 | **这是对的**，别当 bug 修。safebooru 空结果返回 200 + 0 字节 body，`fetch.rs::parse_body` 把空正文当空列表 | — |
 | **新接的图源每次打开、每次切回都是同一批图** | 该接口的第 1 页是确定性的（`pid=0`、`start=0`），而配置里没配随机 | 配 `randomPageIndexMax`（页码分页）或 `randomOffsetMax`（偏移量分页）。注意随机上限别超过服务端允许的深度（safebooru 是 8000 页）。**别先怀疑缓存**：缩略图缓存按 URL 哈希存，换源不可能命中同一批 URL——先看接口是不是确定性的 |
+| **某个图源中英文都搜不到** | 搜索词不是目标站认的形态。booru 的标签是 `hatsune_miku`（下划线、多词 AND），`hatsune miku` 实测 0 条；中文还需先过词表 | 该图源配 `search.underscoreTags: true`；另外**搜索模板别带尺寸过滤**（`width:>=1920` 会把冷门标签吃成 0 条），尺寸交给界面上的分辨率档位 |
 | 翻到很深的页 → 报错里写着 `API limited due to abuse` | safebooru 对异常 `pid` 返回 **XML** 而不是 JSON | 正常使用（连发 6 次）不会触发；错误信息现在会带上正文开头，能直接认出来 |
 | 界面点了没反应 | 前端运行时异常，不是 Rust 崩了 | 窗口里 `F12` 看 Console 第一行红字 |
 | 打包好的 exe 双击不弹窗、也不出界面；PowerShell 启动则几十毫秒就退出，退出码 `-2147483645`，事件日志和 WER 都干净 | **不是你的代码**。装了第三方杀软（本机是 Kaspersky 21.26，`KLIF`/`klflt` 内核驱动 hook 进程创建），未签名的构建会被它拦掉。先看 `root/SecurityCenter2` 和运行中的过滤驱动 | 把项目目录加进杀软排除项，或临时暂停防护。测量时两个基线要在同一防护状态下跑 |
