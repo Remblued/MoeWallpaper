@@ -2,12 +2,13 @@
 
 **轻量的 Windows 二次元壁纸应用。** Tauri 2 · 原生 TypeScript · 不内置任何图片。
 
-[English](README.md) · [下载 v0.1.2](https://github.com/Remblued/MoeWallpaper/releases/tag/v0.1.2) · [轻量数据怎么测](docs/BENCHMARK.md) · [MIT 许可](LICENSE)
+[English](README.md) · [下载](DOWNLOAD.md) · [隐私](PRIVACY.md) · [轻量数据怎么测](docs/BENCHMARK.md) · [MIT 许可](LICENSE)
 
 [![CI](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml)
 
-> **安装包还没有代码签名。** 首次运行可能被 SmartScreen 警告，部分杀软会直接拦。
-> 请用发布页上的 SHA-256 校验；签名方案（以及为什么 EV 证书不值得买）写在
+> **代码签名由 [SignPath Foundation](https://signpath.org/) 提供**（给开源项目的免费签名）；
+> 申请还在进行中，所以**当前的 `v0.1.2` 安装包尚未签名**——首次运行可能被 SmartScreen 警告，
+> 部分杀软会直接拦。请用发布页上的 SHA-256 校验。细节见 [DOWNLOAD.md](DOWNLOAD.md) 和
 > [docs/SIGNING.md](docs/SIGNING.md)。
 
 > **状态：`v0.1.2`。** ✅ 已完成 · 🚧 进行中 · 📋 计划中。只有 [Roadmap](#roadmap) 里的内容才算数。

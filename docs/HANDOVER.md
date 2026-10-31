@@ -234,10 +234,15 @@ Meowallpaper/
 │  ├─ sources/                 ← model(结构) / loader(加载) / extract(提取) / fetch(联网) / dto(出参)
 │  └─ wallpaper/               ← download(下载缓存) / current(当前壁纸) / set(调 Win32)
 ├─ .github/
-│  └─ pull_request_template.md ← 合并前的检查清单
+│  ├─ pull_request_template.md ← 合并前的检查清单
+│  └─ workflows/               ← ci.yml（三道门 + 前端构建）/ release.yml（手动，打包 + 可选签名）
+├─ DOWNLOAD.md                 ← 下载页：也是 SignPath 申请要求的"写明签名由 SignPath 提供"的那一页
+├─ PRIVACY.md                  ← 隐私政策：不收集任何数据，写清本地存什么、请求发给谁
 └─ docs/
    ├─ BENCHMARK.md             ← 四个数字怎么测、原始值、踩过的坑
    ├─ SIGNING.md               ← 代码签名：五种方案的资格与价格、命令、本项目的决定
+   ├─ SIGNPATH.md              ← SignPath 申请：表单字段逐格填法、Reputation 怎么写、批准后 5 步
+   ├─ SOURCES-CN.md            ← 图源调研与实测（§0.1 是接入验收清单）
    └─ HANDOVER.md              ← 本文件
 ```
 

@@ -2,14 +2,15 @@
 
 **Lightweight anime wallpapers for Windows.** Tauri 2 · vanilla TypeScript · no bundled images.
 
-[简体中文](README.zh-CN.md) · [Download v0.1.2](https://github.com/Remblued/MoeWallpaper/releases/tag/v0.1.2) · [How the size numbers are measured](docs/BENCHMARK.md) · [MIT License](LICENSE)
+[简体中文](README.zh-CN.md) · [Download](DOWNLOAD.md) · [Privacy](PRIVACY.md) · [How the size numbers are measured](docs/BENCHMARK.md) · [MIT License](LICENSE)
 
 [![CI](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml)
 
-> **The installer is not code-signed yet.** SmartScreen may warn on first run, and some
-> antivirus products will block it outright. Verify the SHA-256 published on the release
-> page instead; the signing plan (and why EV certificates are not worth it) is in
-> [docs/SIGNING.md](docs/SIGNING.md).
+> **Code signing is provided by the [SignPath Foundation](https://signpath.org/)** (free signing
+> for open-source projects); the application is in progress, so **the current `v0.1.2` installer
+> is not signed yet**. SmartScreen may warn on first run and some antivirus products will block
+> it outright. Verify the SHA-256 published on the release page instead. Details:
+> [DOWNLOAD.md](DOWNLOAD.md) and [docs/SIGNING.md](docs/SIGNING.md).
 
 > **Status: `v0.1.2`.** ✅ done · 🚧 in progress · 📋 planned. Only the [Roadmap](#roadmap) describes what actually ships.
 

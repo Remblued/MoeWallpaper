@@ -15,7 +15,9 @@
 | 条件 | 我们的状态 |
 | --- | --- |
 | 仓库**公开**、有明确的 OSI 许可证 | ✅ public（2026-10-31），MIT |
-| 产物必须**由 GitHub 工作流构建**，且先作为 **workflow artifact** 提交给 SignPath | ⚠️ 已新增 `.github/workflows/release.yml`；**从未用过 SignPath，接上后要跑一次验证** |
+| **下载页要存在，并且页面上必须写明"代码签名由 SignPath Foundation 提供"** | ✅ [DOWNLOAD.md](../DOWNLOAD.md)，README 顶部也写了 |
+| 隐私政策页（收集数据才必须；我们不收集，但表单问链接） | ✅ [PRIVACY.md](../PRIVACY.md) |
+| 产物必须**由 GitHub 工作流构建**，且先作为 **workflow artifact** 提交给 SignPath | ✅ `.github/workflows/release.yml`，2026-10-31 首次运行全绿 |
 | 所有 job 必须跑在 **GitHub 托管 runner** 上（开源策略要求） | ✅ `runs-on: windows-latest`，别改自托管 |
 | 安装 **SignPath GitHub App**（审计日志 / 策略评估用） | ⬜ 待你在 GitHub 上安装 |
 | `upload-artifact` 默认存成 **ZIP** → Artifact Configuration 的根元素必须是 `<zip-file>` | ✅ 工作流就是默认 ZIP |
@@ -24,22 +26,56 @@
 GitHub 工作流构建"。所以我们以前那种"本机打包、手动传 Release"的流程，要和 CI 打包并存：
 `release.yml` 用 `workflow_dispatch` 手动触发（默认不自动跑），产物附到同名 Release。
 
-## 3. 申请表可以直接抄的内容
+## 3. 申请表字段（照这个填，标 ⚠️ 的是要你自己决定的）
+
+表格是 2026-10-31 那次申请页上的实际字段。
 
 | 字段 | 填什么 |
 | --- | --- |
-| Project name | `MoeWallpaper` |
-| Repository | `https://github.com/Remblued/MoeWallpaper` |
-| License | MIT |
-| Project description | 轻量 Windows 二次元壁纸应用，Tauri 2 + 原生 TypeScript；不内置任何图片，图源用 JSON 声明。仓库里没有二进制产物，安装包全部由 `tauri build` 产出。 |
-| Build system | GitHub Actions（`windows-latest`），打包命令 `npx tauri build --bundles nsis` |
-| Artifact to sign | NSIS 安装包 `MoeWallpaper_<version>_x64-setup.exe`（安装器内部含 `moe-wallpaper.exe` 与 `uninstall.exe`） |
-| Release cadence | 不固定；按版本发（`v0.1.2` 为当前版本），每次发布附 SHA-256 |
-| Maintainer | Remblued（`https://github.com/Remblued`） |
-| Signing policy | 建议单条 `release-signing`：只允许从 tag 触发、要求 workflow 成功、拒绝 re-run 之外的花样（他们 UI 里给默认模板，按需勾） |
+| **Download URL** | `https://github.com/Remblued/MoeWallpaper/blob/main/DOWNLOAD.md` |
+| **Privacy Policy URL** | `https://github.com/Remblued/MoeWallpaper/blob/main/PRIVACY.md` |
+| **Wikipedia URL**（可选） | 留空 |
+| **Tagline** ⚠️ | `A 2 MB anime wallpaper app for Windows that borrows the system WebView2 instead of shipping a browser.` |
+| **Category** ⚠️ | 选最接近的「Desktop / Utilities / Desktop application」。**下拉里的选项我看不到**，按实际列表挑；别选「Developer tools」 |
+| **Description** | `MoeWallpaper is a lightweight desktop wallpaper application for Windows. It shows a grid of anime wallpapers fetched from declarative, JSON-described public image sources, and lets the user preview an image, save it, or set it as the desktop wallpaper. It is built with Tauri and the system WebView2 runtime rather than a bundled browser engine, ships no images of its own, and is written in Rust and plain TypeScript. The project publishes reproducible measurements of its size, startup time and memory use, and a SHA-256 hash for every installer it releases.` |
+| **Reputation** ⚠️ | **这是最弱的一格，必须诚实填**，见 §3.1 |
+| **Maintainer Type** ⚠️ | `Individual`（如果下拉里有 Individual developer / Independent，选它） |
+| **Build System** | `GitHub Actions` |
+| **First / Last Name** ⚠️ | **你自己的名字**（会用来创建 SignPath 账号） |
+| **Email** ⚠️ | 你能收信的邮箱（申请通知 + 账号） |
+| **Company Name**（可选） | 留空，除非你有实体 |
+| **Primary Discovery Channel** ⚠️ | 你实际上是从哪知道 SignPath 的。如果是这次查资料时由 AI 助手推荐的，就选 `AI assistant` / `Other` 并在下一格写清楚 |
+| **Please specify the exact source**（可选） | 例：`Recommended by an AI coding assistant while researching Windows code signing; the trail started at Microsoft's "Code signing options for Windows app developers" page.` |
 
-如果表单问"为什么不开源签名就不够"：**用户没法验证下载到的 exe 就是这个仓库构建的**，
-而且未签名会被 SmartScreen 警告、部分杀软直接拦（我们在 `docs/HANDOVER.md` §8 记过实例）。
+### 3.1 Reputation 怎么填（不要编）
+
+我们是一个 2026-10-31 才公开的新项目，**没有媒体报道、没有下载统计、没有社区讨论**。
+硬编一个"被广泛使用"会让整份申请不可信。可以写的是**可核验的工程证据**：
+
+```text
+New project: public repository since 2026-10-31, so there is no adoption data yet - no
+media coverage, no download statistics, no community threads. What can be verified today:
+
+- CI runs on every commit and the run history is public: fmt, clippy -D warnings and the
+  full test suite on Windows, plus type-check and production build for the frontend
+  (https://github.com/Remblued/MoeWallpaper/actions).
+- 102 automated tests in the repository, 6 of them explicitly marked as manual because
+  they touch the network or the desktop.
+- Release integrity is documented rather than claimed: every installer ships with a
+  published SHA-256 (e.g. 2440651A5929BE0CF13C819F743A18C885D5193487303C27E46E02886F44FB9A
+  for v0.1.2), and the build it came from is recorded with machine, toolchain and raw
+  measurement values in docs/BENCHMARK.md.
+- A CI release workflow already builds the installer from a tag and stores it as a
+  workflow artifact, which is the model this application would rely on.
+- Public history with no rewrites; vulnerability reporting enabled.
+
+If reputation evidence is a hard requirement, we would rather be told so and reapply later
+than have unverifiable claims on the record.
+```
+
+**如果你觉得这格过不了**：先别投，等仓库有真实的 star / 下载量 / 讨论（比如发到
+r/opensource、V2EX、少数派之后），再申请。**不要为了过审编数字**——这一条和我们
+`docs/BENCHMARK.md` §0 的规矩是同一条。
 
 ## 4. 建议的 Artifact Configuration
 
