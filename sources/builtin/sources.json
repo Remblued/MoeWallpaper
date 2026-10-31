@@ -16,7 +16,7 @@
       "response": {
         "itemsPath": "data",
         "imageUrl": "url",
-        "thumbnailUrl": "url_thumb",
+        "thumbnailUrl": "img_1280_800",
         "resolution": "resolution",
         "tags": "utag"
       },

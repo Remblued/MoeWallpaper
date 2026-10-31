@@ -645,6 +645,35 @@ mod tests {
             "resolution 字段应该被拆成宽高"
         );
 
+        // 缩略图必须真的比原图小。360 的 `url_thumb` / `url_mid` / `url` 指向同一个
+        // 2560×1440 文件（2026-10-31 实测 309,650 B），网格一页 20 格就是 20 张全尺寸
+        // 壁纸；`img_1280_800` 才是按尺寸产出的那张。只有量字节数能发现这种回退。
+        let thumb_url = images[0].thumbnail_url.clone().expect("360 应该给出缩略图");
+        assert_ne!(thumb_url, images[0].image_url, "缩略图地址和原图地址一样");
+        let orig_len = client()
+            .get(&images[0].image_url)
+            .send()
+            .await
+            .expect("原图下载失败")
+            .bytes()
+            .await
+            .expect("读不到原图正文")
+            .len();
+        let thumb_len = client()
+            .get(&thumb_url)
+            .send()
+            .await
+            .expect("缩略图下载失败")
+            .bytes()
+            .await
+            .expect("读不到缩略图正文")
+            .len();
+        println!("  原图 {orig_len} B / 缩略图 {thumb_len} B（{thumb_url}）");
+        assert!(
+            thumb_len < orig_len,
+            "缩略图（{thumb_len} B）不比原图（{orig_len} B）小——360 可能又改成同一张图了"
+        );
+
         // 连拉三次，第一张不能都是同一张——否则"随机"是假的
         let mut firsts = std::collections::HashSet::new();
         firsts.insert(images[0].image_url.clone());
@@ -898,6 +927,42 @@ mod tests {
         assert!(
             seen.len() > 1,
             "八次请求拿到了同一个 pid（{seen:?}），随机页码没生效"
+        );
+    }
+
+    /// 缩略图字段不许是"名字像缩略图、内容却是原图"的那一个。
+    ///
+    /// 挡的是 360 这个坑：`url_thumb` / `url_mid` / `url` 三个字段**指向同一个文件**
+    /// （2560×1440、309,650 B，2026-10-31 实测），而它是默认图源、界面一页 20 格，
+    /// 于是网格一口气解码 20 张全尺寸壁纸——空闲内存比"无图"多约 267 MB，流量也按原图算。
+    /// 真正按尺寸产出的是 `img_<宽>_<高>` 那组字段（`img_1280_800` 等）。
+    ///
+    /// 判据不是"两个字段名不同"（`url` 和 `url_thumb` 也不同，照样是同一个文件），
+    /// 而是"映射到按尺寸命名的字段"。这条测试挡不住 CDN 哪天偷偷改行为，那一层靠
+    /// `live_360_source_works_end_to_end`（手动跑、联网）量字节数。
+    #[test]
+    fn builtin_thumbnail_mapping_is_not_a_field_that_returns_the_original() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "360")
+            .expect("内置图源里应该有 360");
+
+        let field = source
+            .response
+            .thumbnail_url
+            .as_deref()
+            .expect("360 声明了缩略图，界面要用它铺网格");
+
+        assert_ne!(
+            field, source.response.image_url,
+            "缩略图和原图不能是同一个字段"
+        );
+        assert!(
+            field.starts_with("img_"),
+            "360 的缩略图要用按尺寸命名的 img_<宽>_<高> 字段，实际是 {field:?}；\
+             url_thumb / url_mid 实测返回的就是原图"
         );
     }
 
