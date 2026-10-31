@@ -588,14 +588,16 @@ body.detail-open {
   --glass-scrim: rgba(238, 242, 249, 0.55);
 }
 
-/* 亮色玻璃的底：三层浅色径向渐变。
-   模糊需要"有东西可模糊"，纯色底上做毛玻璃什么也看不出来。 */
+/* 亮色玻璃的底：三层浅色径向渐变，**全部带 alpha**。
+   底色必须半透明：窗口本身是 transparent（`tauri.conf.json`），真正的模糊由 DWM 的
+   Acrylic 画（`src-tauri/src/backdrop.rs`）。这里再铺一层不透明底色就等于把系统材质
+   盖住，等于没开——所以 alpha 只用来调色调，不用来遮。 */
 :root[data-theme="glass"] body {
   background:
-    radial-gradient(120% 90% at 12% 0%, #cfe0ff 0%, transparent 58%),
-    radial-gradient(100% 80% at 88% 8%, #ffd9ec 0%, transparent 52%),
-    radial-gradient(90% 70% at 50% 100%, #d8f3ea 0%, transparent 60%),
-    #eef1f7;
+    radial-gradient(120% 90% at 12% 0%, rgba(207, 224, 255, 0.5) 0%, transparent 58%),
+    radial-gradient(100% 80% at 88% 8%, rgba(255, 217, 236, 0.45) 0%, transparent 52%),
+    radial-gradient(90% 70% at 50% 100%, rgba(216, 243, 234, 0.45) 0%, transparent 60%),
+    rgba(238, 241, 247, 0.32);
   background-attachment: fixed;
 }
 
@@ -620,18 +622,19 @@ body.detail-open {
 
   :root[data-theme="glass"] body {
     background:
-      radial-gradient(120% 90% at 12% 0%, #2b3a5c 0%, transparent 58%),
-      radial-gradient(100% 80% at 88% 8%, #4a2b52 0%, transparent 52%),
-      radial-gradient(90% 70% at 50% 100%, #1b3a3a 0%, transparent 60%),
-      #0d1120;
+      radial-gradient(120% 90% at 12% 0%, rgba(43, 58, 92, 0.55) 0%, transparent 58%),
+      radial-gradient(100% 80% at 88% 8%, rgba(74, 43, 82, 0.5) 0%, transparent 52%),
+      radial-gradient(90% 70% at 50% 100%, rgba(27, 58, 58, 0.5) 0%, transparent 60%),
+      rgba(13, 17, 32, 0.4);
     background-attachment: fixed;
   }
 }
 
-/* 毛玻璃面。注意这是**窗口内**的模糊（backdrop-filter）：
-   它模糊的是窗口自己的背景渐变，不是把桌面透上来。
-   要让桌面透上来（像 TranslucentTB 的任务栏那样）需要开窗口透明
-   再调 DWM 背景，那是改窗口层的事，CSS 做不到。 */
+/* 卡片/工具条自己在窗口内再做一层模糊。
+   窗口的背景已经是 DWM 画的 Acrylic（`src-tauri/src/backdrop.rs`），这里的
+   backdrop-filter 模糊的是"Acrylic 之上的内容"，让卡片比窗口背景更"厚"一点。
+   **桌面透上来靠的是窗口透明 + DWM 材质，不是这里的 backdrop-filter**——
+   只有 CSS 的窗口内模糊时，透出来的是我们自己的渐变，不是桌面。 */
 :root[data-theme="glass"] .toolbar,
 :root[data-theme="glass"] .card,
 :root[data-theme="glass"] .pager-btn,
