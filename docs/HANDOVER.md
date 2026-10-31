@@ -21,8 +21,9 @@
   **桌面挂件挪到 `v0.3.0`**（挂件不产出内容，而且要先有稳定的图源格式——理由写在
   README 的 Roadmap 下面）。
   所以 `sfwQuery` 强制校验、图源格式向后兼容这些"自定义图源前置条件"**不阻塞现在的发布**
-- **签名**：现在**不签**（仓库还 private），公开分发的第一个版本再签；方案与命令见
-  `docs/SIGNING.md`。发布页必须写 SHA-256，这条不因为有没有签名而变
+- **签名**：现在**不签**（仓库已于 2026-10-31 转 public，但签名只对公开分发有意义，
+  而公开分发的第一个版本还没发）。方案与命令见 `docs/SIGNING.md`。发布页必须写
+  SHA-256，这条不因为有没有签名而变
 - **代码量**：约 90 个受管文件，Rust 约 2,440 行、前端 TS 约 690 行（都含注释和测试）。
   **你读得完。**
 
@@ -79,8 +80,10 @@
 - ✅ 发布：`v0.1.2` tag + GitHub Release（带 NSIS 安装包）
   https://github.com/Remblued/MoeWallpaper/releases/tag/v0.1.2
 - ❌ 定时切换
-- ❌ 仓库仍是 private。转 public 前要检查：README 里的下载链接与 CI 徽章对外可见、
-  Release 已存在、LICENSE 与 PR 模板都在
+- ✅ 仓库已公开（2026-10-31）。转 public 前逐条查过：历史里**没有**密钥/凭据类字符串；
+  README 的下载链接与 CI 徽章匿名可访问（都 200）；Release 资产**匿名可下载**、字节哈希与
+  本地被测文件一致；LICENSE、PR 模板、`.gitignore` 都在。**唯一没洗的**：`d0d6373` 那次
+  提交里还留着 `bench/make_icon.py` 的旧个人路径（HEAD 已清，历史没重写，见债表）
 - ⚠️ Electron 基线已经全部测完（安装包 115.57 MB / 安装后 356.77 MB / 冷启动
   104.5 ms / 空闲 133.5 MB 私有）。MoeWallpaper `v0.1.2` 的最新一组：
   **2.04 MB / 5.99 MB / 39.5 ms / 231.0 MB 无图、307.7 MB 有图**。**空闲内存这一项我们
@@ -470,7 +473,7 @@ export async function fetchImages(
 | 360 壁纸是**非公开 API**：无文档、无 SLA，随时可能改或关；而且**没有内容分级参数**，只能固定动漫分类 | `sources/builtin/sources.json` | 挂了就改一段 JSON（图源是数据的好处）；内容限制见 `docs/SOURCES-CN.md` §5 |
 | ~~没有 CI~~ | `.github/workflows/ci.yml` | **已还**：Rust 三道门 + 前端 tsc/vite，两个 job。**CI 不打包、不测数字**（体积/内存必须真机测），见 §2.5 |
 | **`bench/make_icon.py` 的旧版本里有一个个人路径**（某人的图片目录），出现在提交 `d0d6373` | `bench/make_icon.py` | HEAD 已清掉（改成参数 / `MOE_ICON_SRC`）。**历史没重写**：重写会改掉之后所有提交的哈希、还要移动 `v0.1.2` tag，代价远大于这个泄漏。**别以为历史是干净的** |
-| **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | 现在不签（仓库还 private）。公开分发的第一个版本再签：首选免费的 SignPath Foundation，其次 OV 证书 + token；**不买 EV、不自签发给用户**。方案、命令、资格限制见 `docs/SIGNING.md` |
+| **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | 公开分发的第一个版本再签：首选免费的 SignPath Foundation（**仓库已 public，资格条件已满足**），其次 OV 证书 + token；**不买 EV、不自签发给用户**。方案、命令、资格限制见 `docs/SIGNING.md` |
 
 ---
 
