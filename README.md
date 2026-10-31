@@ -13,7 +13,7 @@
 > block it. **Verify the SHA-256 published on the release page instead.** Details:
 > [DOWNLOAD.md](DOWNLOAD.md) · [docs/SIGNING.md](docs/SIGNING.md).
 
-> **Status: `v0.1.2`.** ✅ done · 🚧 in progress · 📋 planned. Only the [Roadmap](#roadmap) describes what actually ships.
+> **Status: `v0.1.3`.** ✅ done · 🚧 in progress · 📋 planned. Only the [Roadmap](#roadmap) describes what actually ships.
 
 ## The idea
 
@@ -73,19 +73,19 @@ Every number in this table is produced on one machine, with one method, on the s
 day, from a **release** build. `TBD` means *not measured yet* — **all four cells are
 measured, there is no `TBD` left**. The method lives in [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
-| Metric | MoeWallpaper `v0.1.2` | Minimal Electron app | How it is measured |
+| Metric | MoeWallpaper `v0.1.3` | Minimal Electron app | How it is measured |
 | --- | --- | --- | --- |
 | Installer size (`.exe`) | **2.04 MB** | **115.57 MB** | file size of the installer produced by the build |
 | Installed size on disk | **5.99 MB** | **356.77 MB** | sum of all files under the install directory |
-| Cold start to visible window | **39.5 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
-| Idle memory (60 s after launch) | **231.0 MB** (private, empty grid)<br>**307.7 MB** (private, 20 images loaded) | **133.5 MB** (private, blank window) | whole process tree, not just the main process; both window states measured |
+| Cold start to visible window | **41 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
+| Idle memory (60 s after launch) | **232.9 MB** (private, empty grid)<br>**313.5 MB** (private, 20 images loaded) | **133.5 MB** (private, blank window) | whole process tree, not just the main process; both window states measured |
 
 The installer is **about 57× smaller** (115.57 MB versus 2.04 MB), the installed
-footprint is **about 60× smaller**, and cold start is **about 2.6× faster**.
+footprint is **about 60× smaller**, and cold start is **about 2.5× faster**.
 
 Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
 Intel i7-14650HX / 31.6 GB / Windows 11 build 26200 / release build
-(LTO + strip) / `v0.1.2` (360-thumbnail fix, webp transcode, real Acrylic).
+(LTO + strip) / `v0.1.3` (three bug fixes and the shape filter; the difference from `v0.1.2` is inside the noise band).
 
 **Four caveats that belong with these numbers:**
 
@@ -99,22 +99,22 @@ Intel i7-14650HX / 31.6 GB / Windows 11 build 26200 / release build
   is now always a real JPEG.
 - **Cold start is *window appears*, not *page rendered*.** The latter is a few
   hundred milliseconds later. The very first launch after installing measured
-  96 ms (AV scan + cold file read); the steady median is 39.5 ms.
+  116 ms (AV scan + cold file read); the steady median is 41 ms (two batches of 10: 44.5 and 40, 41 across all 20).
 - **Idle memory is meaningless without the window state.** Decoded images land in
-  private memory: the same exe sits at 231.0 MB with an empty grid (median of 3,
-  215.1–238.8) and 307.7 MB once the default source's 20 images are on screen
-  (median of 3, 299.3–313.2). Reporting a single number would merge two different
+  private memory: the same exe sits at 232.9 MB with an empty grid (median of 3,
+  211.6–233.9) and 313.5 MB once the default source's 20 images are on screen
+  (median of 3, 301.7–333.1). Reporting a single number would merge two different
   scenarios.
 
-Idle memory is reported as **private**, not working set (384.2 MB empty, 405.5 MB
+Idle memory is reported as **private**, not working set (388.4 MB empty, 412.7 MB
 loaded) — summing working sets double-counts DLL pages shared between the app and
 WebView2 processes.
 
 **This is the metric we lose, but the comparison has to match.** The Electron
 baseline is **a blank window that loads no images**, so the only row it can be
-compared with is our *empty grid*: **231.0 MB against 133.5 MB, 97.5 MB more
-(1.73×)**. The gap shows up in the process count: we run 7 processes, Electron 4,
-and our idle GPU process alone holds 115–137 MB private. **The loaded 307.7 MB must
+compared with is our *empty grid*: **232.9 MB against 133.5 MB, 99.4 MB more
+(1.74×)**. The gap shows up in the process count: we run 7 processes, Electron 4,
+and our idle GPU process alone holds 115–137 MB private. **The loaded 313.5 MB must
 not be compared with the blank 133.5 MB** — that would be "20 wallpapers" against
 "nothing on screen". An Electron app showing the same 20 images would grow too;
 this minimal baseline simply cannot measure that side.
@@ -129,12 +129,12 @@ decoded 20 full-resolution wallpapers: 465.8 MB loaded, 267 MB more than the emp
 grid ([SOURCES-CN §2](docs/SOURCES-CN.md)). Mapping it to `img_1280_800`, the size
 variant the API actually produces, took the loaded figure from **465.8 MB to
 293.7 MB (−172 MB)** and narrowed the spread from 187–580 MB to 274–298 MB. With
-webp support and Acrylic on top, the current figures are 307.7 MB vs 231.0 MB —
-about 77 MB for the 20 1280×800 images themselves. Going lower would mean fewer
+webp support and Acrylic on top, the current figures are 313.5 MB vs 232.9 MB —
+about 80 MB for the 20 1280×800 images themselves. Going lower would mean fewer
 cards or server-side scaling — **not done, not measured**.
 
 **The memory spread is not chased any further.** The same machine and the same
-build still range over 215–314 MB, and other devices will differ more. So the
+build still range over 211–333 MB, and other devices will differ more. So the
 numbers are always reported as **median plus range**, never as a precise-looking
 single figure. See [BENCHMARK](docs/BENCHMARK.md) §5.
 
@@ -152,7 +152,7 @@ Two rules keep this honest:
 - If a measurement contradicts a claim, **the claim changes**. The numbers are the
   product; the marketing line is not.
 
-## Features (v0.1.2)
+## Features (v0.1.3)
 
 | Feature | Status |
 | --- | --- |
@@ -171,11 +171,11 @@ Two rules keep this honest:
 | Declarative JSON sources | ✅ |
 | Domestic (CN) sources | ✅ 360 Wallpaper (the default source) |
 | CI (fmt / clippy / test / tsc / vite / node:test on GitHub Actions) | ✅ |
-
-> **That table describes the `v0.1.2` release.** `main` carries unreleased work:
-> the shape filter, the search fixes (see [handover](docs/HANDOVER.md) §1), and
-> frontend unit tests. Version number and installer move when it ships.
 | Scheduled rotation | ❌ deliberately cut, see below |
+
+> That table is exactly what ships as `v0.1.3`, including the three bug fixes and the
+> shape filter. What those three were, and why testing missed them, is in the
+> [handover](docs/HANDOVER.md) §1.
 
 ### Not in v0.1.0
 
@@ -276,6 +276,7 @@ directories, so a folder is created when its first real file is written, not bef
 | --- | --- | --- |
 | `v0.1.1` | **A domestic source that works without a proxy** (360 anime category), plus offset paging, combined-resolution fields and an image https upgrade | ✅ |
 | `v0.1.2` | Glass theme **follows the system light/dark setting**; new safebooru source and a content note on lolicon; then **real Acrylic** (desktop shows through), **webp/PNG/GIF wallpapers**, real 360 thumbnails, and CI | ✅ |
+| `v0.1.3` | Three real bugs fixed: **a thumbnail opened its neighbour**, **search was eaten by a random page index**, and **English aliases in the tag dictionary never applied**; new **shape filter** (monitor / tablet / phone); frontend gets its first unit tests | ✅ |
 | `v0.2.0` | **User-supplied sources**: your own JSON source configs, validated when they load. `v0.1.x` ships built-in sources only, by decision | 📋 |
 | `v0.3.0` | **Desktop widget** — deliberately after the source system, see below | 📋 |
 | `v0.4.0` | Pluggable sources, if the declarative format ever stops being enough | 📋 |

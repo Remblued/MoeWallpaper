@@ -1,7 +1,7 @@
 # 代码签名怎么做，以及我们为什么现在还没签
 
 > 本文回答两个问题：**签名到底解决什么**，以及**这个项目要签的话该怎么签**。
-> 结论先放这儿：**`v0.1.2` 不签，公开分发的第一个版本再签**；真要签，最可能走的是
+> 结论先放这儿：**`v0.1.2` 和 `v0.1.3` 都没签**——SignPath Foundation 在 2026-10-31 拒了申请（原因是项目还没有公开传播度，见 `docs/SIGNPATH.md` §0），所以"公开分发的第一个版本再签"这个计划没能落地。真要签，最可能走的是
 > **免费的开源签名计划（SignPath Foundation）**，其次是 **OV 证书 + USB token**。
 > `Azure Artifact Signing` 对个人开发者只开放美国和加拿大，中国大陆的个人/组织走不通。
 
@@ -10,7 +10,7 @@
 ## 1. 现在的状态（实测，不是推测）
 
 ```powershell
-Get-AuthenticodeSignature .\src-tauri\target\release\bundle\nsis\MoeWallpaper_0.1.2_x64-setup.exe
+Get-AuthenticodeSignature .\src-tauri\target\release\bundle\nsis\MoeWallpaper_0.1.3_x64-setup.exe
 #   Status  : NotSigned
 #   Signer  : (空)
 Get-AuthenticodeSignature .\src-tauri\target\release\moe-wallpaper.exe
@@ -93,7 +93,7 @@ Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.HasPrivateKey } |
 
 # 3) 验证（一定要自己验一次，别只看 signtool 没报错）
 & $signtool verify /pa /all .\src-tauri\target\release\bundle\nsis\MoeWallpaper_0.1.2_x64-setup.exe
-Get-AuthenticodeSignature .\src-tauri\target\release\bundle\nsis\MoeWallpaper_0.1.2_x64-setup.exe
+Get-AuthenticodeSignature .\src-tauri\target\release\bundle\nsis\MoeWallpaper_0.1.3_x64-setup.exe
 #   Status 应为 Valid
 ```
 

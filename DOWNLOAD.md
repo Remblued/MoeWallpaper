@@ -34,8 +34,8 @@ Consequences, so nobody is surprised:
 ## Verify what you downloaded
 
 ```powershell
-Get-FileHash .\MoeWallpaper_0.1.2_x64-setup.exe -Algorithm SHA256
-Get-AuthenticodeSignature .\MoeWallpaper_0.1.2_x64-setup.exe   # Status: NotSigned (for now)
+Get-FileHash .\MoeWallpaper_0.1.3_x64-setup.exe -Algorithm SHA256
+Get-AuthenticodeSignature .\MoeWallpaper_0.1.3_x64-setup.exe   # Status: NotSigned (for now)
 ```
 
 The expected hash for each release is on that release's page, and the build it came from is
