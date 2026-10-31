@@ -6,11 +6,12 @@
 
 [![CI](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml)
 
-> **Code signing is provided by the [SignPath Foundation](https://signpath.org/)** (free signing
-> for open-source projects); the application is in progress, so **the current `v0.1.2` installer
-> is not signed yet**. SmartScreen may warn on first run and some antivirus products will block
-> it outright. Verify the SHA-256 published on the release page instead. Details:
-> [DOWNLOAD.md](DOWNLOAD.md) and [docs/SIGNING.md](docs/SIGNING.md).
+> **The installer is not code-signed.** We applied to the [SignPath Foundation](https://signpath.org/)
+> (free signing for open-source projects) and were declined because the project has no public
+> visibility yet — which is exactly what that programme requires; their paid plans need a
+> registered organisation. So SmartScreen may warn on first run and some antivirus products will
+> block it. **Verify the SHA-256 published on the release page instead.** Details:
+> [DOWNLOAD.md](DOWNLOAD.md) · [docs/SIGNING.md](docs/SIGNING.md).
 
 > **Status: `v0.1.2`.** ✅ done · 🚧 in progress · 📋 planned. Only the [Roadmap](#roadmap) describes what actually ships.
 

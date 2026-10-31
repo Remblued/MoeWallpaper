@@ -241,7 +241,8 @@ Meowallpaper/
 └─ docs/
    ├─ BENCHMARK.md             ← 四个数字怎么测、原始值、踩过的坑
    ├─ SIGNING.md               ← 代码签名：五种方案的资格与价格、命令、本项目的决定
-   ├─ SIGNPATH.md              ← SignPath 申请：表单字段逐格填法、Reputation 怎么写、批准后 5 步
+   ├─ SIGNPATH.md              ← SignPath 申请：结果（被拒，原因=传播度）、表单字段、价目、重新申请条件
+   ├─ LAUNCH.md                ← 传播清单：渠道、两份发帖草稿、记录表、重新申请的前置信号
    ├─ SOURCES-CN.md            ← 图源调研与实测（§0.1 是接入验收清单）
    └─ HANDOVER.md              ← 本文件
 ```
@@ -528,7 +529,7 @@ export async function fetchImages(
 | 360 壁纸是**非公开 API**：无文档、无 SLA，随时可能改或关；而且**没有内容分级参数**，只能固定动漫分类 | `sources/builtin/sources.json` | 挂了就改一段 JSON（图源是数据的好处）；内容限制见 `docs/SOURCES-CN.md` §5 |
 | ~~没有 CI~~ | `.github/workflows/ci.yml` | **已还**：Rust 三道门 + 前端 tsc/vite，两个 job。**CI 不打包、不测数字**（体积/内存必须真机测），见 §2.5 |
 | **`bench/make_icon.py` 的旧版本里有一个个人路径**（某人的图片目录），出现在提交 `d0d6373` | `bench/make_icon.py` | HEAD 已清掉（改成参数 / `MOE_ICON_SRC`）。**历史没重写**：重写会改掉之后所有提交的哈希、还要移动 `v0.1.2` tag，代价远大于这个泄漏。**别以为历史是干净的** |
-| **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | **SignPath Foundation 已于 2026-10-31 提交申请并收到确认邮件，等人工审核**（材料、审核期能做的事、批准后的 5 步都在 `docs/SIGNPATH.md`；签名步骤已预置在 `.github/workflows/release.yml`）。审核期间**不要重复提交**。等它之前：每个 Release 必须写 SHA-256。**不买 EV、不自签发给用户** |
+| **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | **SignPath Foundation 申请被拒（2026-10-31）**：唯一原因是项目还没有公开传播度（他们要看 star/fork/contributor、外部文章、独立讨论、机构背书）。**决定：先攒传播度再申请**，清单与两份发帖草稿在 `docs/LAUNCH.md`。付费方案不可行：Starter $500/年且证书只签发给法人主体（`docs/SIGNPATH.md` §0.1）。`release.yml` 的签名步骤保留，重新通过后配变量即可。等它之前：每个 Release 必须写 SHA-256 |
 
 ---
 

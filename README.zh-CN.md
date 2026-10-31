@@ -6,10 +6,10 @@
 
 [![CI](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml)
 
-> **代码签名由 [SignPath Foundation](https://signpath.org/) 提供**（给开源项目的免费签名）；
-> 申请还在进行中，所以**当前的 `v0.1.2` 安装包尚未签名**——首次运行可能被 SmartScreen 警告，
-> 部分杀软会直接拦。请用发布页上的 SHA-256 校验。细节见 [DOWNLOAD.md](DOWNLOAD.md) 和
-> [docs/SIGNING.md](docs/SIGNING.md)。
+> **安装包没有代码签名。** 我们申请了 [SignPath Foundation](https://signpath.org/)（给开源项目的
+> 免费签名），被拒的原因是**项目还没有公开传播度**——而那正是这个项目的要求；它的付费方案则
+> 要求法人主体。所以首次运行可能被 SmartScreen 警告，部分杀软会直接拦。**请用发布页上的
+> SHA-256 校验。** 细节：[DOWNLOAD.md](DOWNLOAD.md) · [docs/SIGNING.md](docs/SIGNING.md)。
 
 > **状态：`v0.1.2`。** ✅ 已完成 · 🚧 进行中 · 📋 计划中。只有 [Roadmap](#roadmap) 里的内容才算数。
 

@@ -4,18 +4,48 @@
 > **不需要个人身份公证**；他们验证并背书的是"这个二进制由这个仓库的 GitHub 工作流构建"。
 > 申请入口：<https://signpath.org/apply>（表单要到他们的 Web 应用里填）。
 
-## 0. 状态（2026-10-31）
+## 0. 状态：**未通过**（2026-10-31 申请，同日回信）
 
-**已提交，已收到确认邮件，等人工审核。** 原文要点：
+结果不是"材料有问题"，而是**传播度不够**。原文要点：
 
-> "We've received your application and will review it shortly. Our team will get back to you
-> within the next few business days with next steps or any follow-up questions."
+> "The Foundation program is designed for projects that have already established a certain level
+> of public trust and visibility… we look for external signals such as community adoption
+> (GitHub stars, forks, contributors), external articles, independent references or discussions
+> (Reddit, Stack Overflow, YouTube, etc.) or institutional backing, and evidence of sustained
+> activity and engagement."
+>
+> "This isn't a judgment on the quality or potential of your work, it's purely about the level of
+> public visibility the Foundation program requires."
+>
+> "You're very welcome to reapply once it has gained broader recognition."
 
-- **不要重复提交。** 表单是 HubSpot 嵌入的（`js-eu1.hsforms.net`），第一次提交时前端一直转圈
-  但其实**已经送达**——重复提交只会被节流或制造重复申请。
-- 如果确认邮件里把收件人名字写错了（会用来创建 SignPath 账号），**回一封邮件更正**，
-  别等账号建好再改。
-- 审核期间能做的都列在 §5.0；等他们回信问问题就照 §3 的材料答。
+**所以他们列的六类信号，就是我们下次要准备的东西**：star/fork/contributor、外部文章、
+独立讨论（Reddit / Stack Overflow / YouTube）、机构背书、持续活跃的提交与互动。
+
+**决定：现在不上付费方案，先攒传播度、之后再申请 Foundation。** 理由见 §0.1 的价目——
+他们的付费订阅要求**法人主体**，不是"个人花钱就能签"。
+
+### 0.1 想更快拿到签名的三条路（价目取自他们的订阅文档，2026-10-31）
+
+| 方案 | 真实成本 | 障碍 |
+| --- | --- | --- |
+| **SignPath Starter**（付费订阅） | **$500/年**：1 项目、1 用户、**20 次 release 签名/年**、2 周产物保留 | 他们给的证书是 **GlobalSign 的 EV**，而"GlobalSign 代码签名证书只能签发给合法注册的组织"——**个人主体不行**，还要验授权 |
+| **OV 证书**（自己向 CA 买） | 约 **$150–300/年** + 硬件 token | 需要身份验证；2023 年起私钥必须在 HSM/USB token 里，不能放 CI；**签名要插 U 盘，不能全自动** |
+| **Microsoft Store（MSIX）** | 免费（商店重签） | 要做 MSIX 打包 + 上架流程；Tauri 不直接产出 MSIX，工作量中高 |
+| 继续不签 | 0 | SmartScreen 警告；靠发布 SHA-256 让用户自校验 |
+
+> 价格是 2026-10-31 从 <https://docs.signpath.io/change-subscription> 读的原文，**买之前自己再确认一次**。
+
+其余章节（§2 前置条件、§3 表单字段、§4 artifact 配置、§5 接入步骤）**留着不动**：
+一旦项目有了传播度、重新申请通过，这些就是现成的接入清单。`release.yml` 里的签名步骤也
+一直留在那儿（`if: vars.SIGNPATH_PROJECT_SLUG != ''` 挡着，没配变量不会红）。
+
+### 0.2 重新申请前的最低准备（不是门槛，是"别又白跑一趟"）
+
+1. `docs/LAUNCH.md` 里的渠道至少发过一轮，并留下**可核验的链接**（文章/帖子/视频）。
+2 **真实的** star / fork / 下载量（不许刷：他们看的是外部信号，刷量本身就是不可信信号）。
+3. 仓库保持持续提交（这几次的 CI、release、文档都在加分）。
+4. README 顶部把"未签名"的状态写清楚（已经在做）。
 
 ## 1. 为什么这一步我不能替你做
 

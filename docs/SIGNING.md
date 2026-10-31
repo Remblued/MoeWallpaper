@@ -156,15 +156,19 @@ Get-FileHash .\MoeWallpaper_0.1.2_x64-setup.exe -Algorithm SHA256
 ## 6. 本项目的决定
 
 - **`v0.1.2` 不签。** 当时仓库还是 private，签名只会在每次打包时多要一次 PIN，收益为零。
-- **仓库已于 2026-10-31 转 public**，所以 **SignPath Foundation 的资格条件现在满足了**
-  （公开仓库 + OSI 许可 + 有 CI）。申请材料、前置条件和批准后的接入清单写在
-  `docs/SIGNPATH.md`；签名那一步已经预置在 `.github/workflows/release.yml` 里，
-  变量一配就生效。
-- **公开分发的第一个版本必须签。** 首选 SignPath；如果它不收（名额/资格问题），再买
-  **OV 证书 + token**。
-- **不买 EV**，理由见 §2/§3：2024 年起它不再提供 SmartScreen 秒过。
+- **2026-10-31 申请了 SignPath Foundation，当天被拒**：理由不是材料，是**项目还没有公开
+  传播度**（他们要看 star/fork/contributor、外部文章、独立讨论、机构背书、持续活跃）。
+  原文摘要与重新申请的条件见 `docs/SIGNPATH.md` §0。
+- **因此现在的决定是：先攒传播度，之后再申请 Foundation。** 中间不买付费方案——
+  SignPath 的付费订阅 Starter 是 **$500/年**，而且它给的证书是 GlobalSign 的 **EV**，
+  **只能签发给合法注册的组织**，个人主体买不了（价目与条文见 `docs/SIGNPATH.md` §0.1）。
+- **如果哪天真的必须先有签名**：向 CA 买 **OV 证书**（约 $150–300/年 + 硬件 token），
+  签名要插 U 盘、不能全自动，接受这个代价再买。
+- **不买 EV**：2024 年起它不再提供 SmartScreen 秒过（§2/§3）。
 - **不自签名发给用户**，那只会在别人机器上变成"不受信任"。
-- 无论签不签，**发布页必须写 SHA-256**，这条已经是流程的一部分。
+- 无论签不签，**发布页必须写 SHA-256 + 状态说明**，这条已经是流程的一部分。
+- 签名步骤继续留在 `.github/workflows/release.yml` 里（用 `vars.SIGNPATH_PROJECT_SLUG`
+  挡着），重新申请通过后只配变量即可，不用重写流水线。
 
 ## 7. 这一版的范围：只有内置图源
 

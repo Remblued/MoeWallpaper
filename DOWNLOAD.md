@@ -1,8 +1,8 @@
 # Download
 
-> This page is the project's canonical download page. It is also the page referenced by our
-> [SignPath Foundation](https://signpath.org/) application, which is why it says plainly what
-> the signing status is — including when it is *not* signed yet.
+> This page is the project's canonical download page. It also states the signing status plainly,
+> including when nothing is signed yet — a download page that only says "free" and hides that is
+> not worth much.
 
 ## Get the installer
 
@@ -14,19 +14,22 @@ from the sources you pick inside the app.
 
 ## Code signing
 
-**Code signing for MoeWallpaper is provided by the [SignPath Foundation](https://signpath.org/)**,
-which offers free code signing to open-source projects: the private key stays on SignPath's HSM
-and they vouch that the binary was built from this repository.
+**None of the current releases are code-signed.** We applied to the
+[SignPath Foundation](https://signpath.org/) (free signing for open-source projects: private key on
+their HSM, and they vouch that the binary was built from this repository) and were declined on
+2026-10-31 — not for anything wrong with the build, but because the project has no public
+visibility yet, and that programme requires exactly that (stars, contributors, external articles,
+independent discussions). Their paid plans start at $500/year and require a legally registered
+organisation for the certificate, so they are not the right answer for a one-person project.
 
-**Status of the current release (`v0.1.2`): not signed yet.** The SignPath application is in
-progress; until it is approved, the installer will show a SmartScreen warning and some antivirus
-products may block it. Two concrete consequences, so nobody is surprised:
+Consequences, so nobody is surprised:
 
-- Windows SmartScreen may say "Windows protected your PC" — that is what an unsigned, new
-  publisher looks like, not a sign that something is wrong with the file.
-- Verify the download with the SHA-256 published on the release page instead of trusting a
-  signature (see below). Once signing is live, this page will say so and the hash will be
-  re-recorded for the signed build.
+- Windows SmartScreen may say "Windows protected your PC" — that is what an unsigned, unknown
+  publisher looks like, not a sign that the file is wrong.
+- Some antivirus products block unsigned NSIS installers heuristically.
+- **Verify the download by SHA-256 instead** (below). The signing situation will be revisited
+  when the project has the visibility the programme asks for; this page will be updated the day
+  that changes rather than quietly.
 
 ## Verify what you downloaded
 
