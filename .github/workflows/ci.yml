@@ -1,0 +1,77 @@
+# GitHub Actions：三道门（Rust）+ 两道门（前端）。
+#
+# 为什么是这两个 job 而不是一个：Rust 和前端用的工具链完全不同，混在一个 job 里
+# 任何一个红了都会挡住另一个的反馈；拆开还能并行跑，墙钟时间更短。
+#
+# 为什么没有第三个 job 去 `tauri build`：release 构建带 LTO + codegen-units=1，
+# 一次要几分钟，而且打包出来的安装包在 CI 里没人用（Release 由人工上传）。
+# **体积和冷启动数字必须在真机上测**（docs/BENCHMARK.md §1 要求固定条件），
+# CI 只能保证"编得过、测试过、clippy 干净、类型对"，这两件事别混为一谈。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一个分支连续推送时，取消上一个还在跑的 run：省额度，也省得两份日志打架。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust (fmt / clippy / test)
+    # 必须 Windows：项目只发 Windows，代码里有 user32 / dwmapi / advapi32 的 FFI 和
+    # #[cfg(windows)] 分支，换到 ubuntu 上连编译都过不去。
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable + rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # 缓存 ~/.cargo 与 target：没有它每次都要从零编 tauri 那一大坨。
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: cargo fmt --check
+        run: cargo fmt --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      # 联网/改桌面的测试都标了 #[ignore]，这里跑的是 96 个确定性测试。
+      - name: cargo test
+        run: cargo test
+
+  web:
+    name: Frontend (tsc / vite build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # npm ci 而不是 npm install：锁文件说什么就装什么，CI 里不允许悄悄升级。
+      - name: npm ci
+        run: npm ci
+
+      - name: tsc --noEmit
+        run: npx tsc --noEmit
+
+      - name: vite build
+        run: npx vite build
