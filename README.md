@@ -2,10 +2,11 @@
 
 **Lightweight anime wallpapers for Windows.** Tauri 2 · vanilla TypeScript · no bundled images.
 
-[简体中文](README.zh-CN.md) · [How the size numbers are measured](docs/BENCHMARK.md) · [MIT License](LICENSE)
+[简体中文](README.zh-CN.md) · [Download v0.1.2](https://github.com/Remblued/MoeWallpaper/releases/tag/v0.1.2) · [How the size numbers are measured](docs/BENCHMARK.md) · [MIT License](LICENSE)
 
-> **Status: pre-`v0.1.0`, built in public.**
-> ✅ done · 🚧 in progress · 📋 planned. Only the [Roadmap](#roadmap) describes what actually ships.
+[![CI](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml)
+
+> **Status: `v0.1.2`.** ✅ done · 🚧 in progress · 📋 planned. Only the [Roadmap](#roadmap) describes what actually ships.
 
 ## The idea
 
@@ -262,7 +263,7 @@ directories, so a folder is created when its first real file is written, not bef
 | Version | Scope | Status |
 | --- | --- | --- |
 | `v0.1.1` | **A domestic source that works without a proxy** (360 anime category), plus offset paging, combined-resolution fields and an image https upgrade | ✅ |
-| `v0.1.2` | Glass theme **follows the system light/dark setting** (semi-transparent, never fully transparent); new safebooru source and a content note on lolicon | ✅ |
+| `v0.1.2` | Glass theme **follows the system light/dark setting**; new safebooru source and a content note on lolicon; then **real Acrylic** (desktop shows through), **webp/PNG/GIF wallpapers**, real 360 thumbnails, and CI | ✅ |
 | `v0.2.0` | **Desktop widget** and **user-supplied APIs** | 📋 |
 | `v0.3.0` | Desktop widget (桌面挂件) | 📋 |
 | `v0.4.0` | Pluggable sources, if the declarative format ever stops being enough | 📋 |

@@ -70,7 +70,11 @@
   见 `docs/SOURCES-CN.md` §0.1 第 1 条
 - ✅ webp：**产品决定"不为了体积砍体验"**，加了 `image` 解码器并把 `current.jpg` 统一转成
   JPEG（安装包 +0.23 MB，已实测）。夜轻图源仍不接，卡在"纯文本行 + 无缩略图"
+- ✅ 发布：`v0.1.2` tag + GitHub Release（带 NSIS 安装包）
+  https://github.com/Remblued/MoeWallpaper/releases/tag/v0.1.2
 - ❌ 定时切换
+- ❌ 仓库仍是 private。转 public 前要检查：README 里的下载链接与 CI 徽章对外可见、
+  Release 已存在、LICENSE 与 PR 模板都在
 - ⚠️ Electron 基线已经全部测完（安装包 115.57 MB / 安装后 356.77 MB / 冷启动
   104.5 ms / 空闲 133.5 MB 私有）。MoeWallpaper `v0.1.2` 的最新一组：
   **2.04 MB / 5.99 MB / 39.5 ms / 231.0 MB 无图、307.7 MB 有图**。**空闲内存这一项我们
@@ -142,6 +146,10 @@ npx tsc --noEmit
 
 **本地等价命令**就是上面那四条（fmt / clippy / test / tsc）；`npx vite build` 是打包
 前那次构建，顺手也跑一下。
+
+**第一次真实运行（2026-10-31，`f4d4ad2`）**：两个 job 全绿——前端 16 秒，Rust 冷缓存
+约 12 分钟（`Swatinem/rust-cache` 起了作用之后会快很多）。这一步的意义是：CI 红了就只
+可能是这三道门本身，不会再出现"本地能过、CI 不能过"的模糊地带。
 
 ---
 
