@@ -53,8 +53,10 @@
 
 ### 未做（这就是接下来的活）
 
-- ✅ 玻璃主题（v0.1.1，窗口内 `backdrop-filter`，不是真 Mica/Acrylic）
-- ❌ 真 Mica/Acrylic：要 `transparent: true` + `DwmSetWindowAttribute`，改动会动到窗口层
+- ✅ 玻璃主题（v0.1.1 起；**v0.1.2 改成跟随系统亮/暗**，靠 `prefers-color-scheme`
+  两套变量，是窗口内 `backdrop-filter`，不是真 Mica/Acrylic）
+- ❌ 真 Mica/Acrylic：要 `transparent: true` + `DwmSetWindowAttribute`（桌面能透上来，
+  才是 TranslucentTB 那种观感）。改动会动到窗口层，且只能在真窗口上看效果
 - ✅ 国内图源：360 壁纸（v0.1.1）；2026-10-31 又接上 safebooru，并把 lolicon 的图片域名钉到
   `i.pixiv.re`。**5 个图源实测 4 个能直连**，只有 wallhaven 不行。依据在 `docs/SOURCES-CN.md` §9–§10
 - ✅ 五个图源都能"换一批"：360 用 `randomOffsetMax`、safebooru 用 `randomPageIndexMax`，

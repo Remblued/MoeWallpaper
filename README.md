@@ -120,7 +120,7 @@ Two rules keep this honest:
 | Keyword search (Chinese tag dictionary, per-source search endpoints) | ✅ |
 | Pagination | ✅ |
 | Resolution filter (≥1080p / ≥1440p / ≥4K) | ✅ |
-| Dark / light / glass themes, remembered | ✅ |
+| Dark / light / glass themes, remembered; **glass follows the system light/dark setting** | ✅ |
 | One-click wallpaper (Win32 `SystemParametersInfo`) | ✅ |
 | Save to Pictures without overwriting | ✅ |
 | Local cache (thumbnails, current wallpaper) | ✅ |
@@ -226,6 +226,7 @@ directories, so a folder is created when its first real file is written, not bef
 | Version | Scope | Status |
 | --- | --- | --- |
 | `v0.1.1` | **A domestic source that works without a proxy** (360 anime category), plus offset paging, combined-resolution fields and an image https upgrade | ✅ |
+| `v0.1.2` | Glass theme **follows the system light/dark setting** (semi-transparent, never fully transparent); new safebooru source and a content note on lolicon | ✅ |
 | `v0.2.0` | **Desktop widget** and **user-supplied APIs** | 📋 |
 | `v0.3.0` | Desktop widget (桌面挂件) | 📋 |
 | `v0.4.0` | Pluggable sources, if the declarative format ever stops being enough | 📋 |
