@@ -119,6 +119,18 @@ export interface SearchSpec {
    * 不开这个，中文搜索逢多词必 0 条。
    */
   underscoreTags?: boolean;
+  /**
+   * 精确标签搜到 0 条时，给标签补一个结尾 `*` 再试一次。
+   *
+   * booru 的标签是"全站用户约定"的，和口语差得很远：`lycoris` 不是标签，
+   * `lycoris_recoil` 才是；`elaina` 不存在，`elaina_(majo_no_tabitabi)` 才是。
+   * Gelbooru 系的 `tags` 支持 `前缀*`，补一个星号就能把这些词救回来。
+   *
+   * **只在精确搜到 0 条时发生**，而且界面必须写明"这是前缀扩展的结果"：
+   * 前缀匹配是模糊的，会带出名字以它开头的别的东西。
+   * 不认 `*` 的接口别开这个（会白发一次请求）。
+   */
+  wildcardFallback?: boolean;
 }
 
 /** 单个图源。 */

@@ -61,10 +61,31 @@
 | 真实图源 | 360 / safebooru / wallhaven / nekos.best / lolicon，全部免费、无需 API key | `sources/builtin/sources.json` |
 | 内容提示 | `contentNote`：图源名旁标出"尺度较大"（目前只有 lolicon）。**是提示，不是过滤器** | `sources/builtin/sources.json` + `src/main.ts::syncSourceUi` |
 | 关键词搜索 | 每个图源可声明自己的搜索地址；中文走本地词表翻成英文标签 | `src-tauri/src/sources/search.rs` + `search/terms.json` |
-| 前端 | 图源下拉、缩略图网格、四态、toast | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
-| **CI** | GitHub Actions：Rust（fmt/clippy/test）+ 前端（tsc/vite），见 §2.5 | `.github/workflows/ci.yml` |
+| **搜索不随机** | 随机页码/起点只作用于**浏览**；搜索永远是确定的 `page-1`。2026-11-02 修 | `src-tauri/src/sources/fetch.rs::build_url` |
+| **前缀兜底** | 精确标签 0 条时补 `*` 再试一次，并把"这是放宽过的结果"带回前端 | `SearchSpec::wildcard_fallback` + `FetchResult.notice` |
+| **比例筛选** | 显示器（≥1.6）/ 平板（1.15~1.6 或 0.62~0.87）/ 手机（<0.62）。区间刻意留缝 | `src/lib/filters.ts` |
+| **前端纯逻辑测试** | `gridEntries` 的下标、比例分档、未知尺寸。零依赖，`node --test` 直接跑 .ts | `tests/filters.test.ts` |
+| 前端 | 图源下拉、缩略图网格、四态、toast、两个筛选下拉 | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
+| **CI** | GitHub Actions：Rust（fmt/clippy/test）+ 前端（tsc / test:web / vite），见 §2.5 | `.github/workflows/ci.yml` |
 
-**测试：102 个（96 个自动跑，6 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）。`cargo clippy -D warnings` 零告警。**
+**测试：111 个 Rust（103 个自动跑 + 8 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）
+\+ 9 个前端纯逻辑测试（`npm run test:web`）。`cargo clippy -D warnings` 零告警。**
+
+### 2026-11-02：一次用户反馈牵出的三个真 bug
+
+用户报了两件事：**"开了分辨率筛选 + 搜索之后，点进去的原图不是缩略图那张"**，
+和 **"safebooru 很多关键词搜不到（鸣潮/wuwa、伊雷娜、lycoris）"**。查下来是三个独立的错，
+**全部在我们这边**：
+
+| # | 症状 | 真正的原因 | 修法 | 验证 |
+|---|---|---|---|---|
+| 1 | 点缩略图打开的是隔壁那张大图 | 卡片 `data-idx` 写的是**筛选后**的序号，点击时拿它查**未筛选**的完整数组 → 筛掉几张，后面全体错位。只在"开了筛选且筛掉不止一张"时出现，所以手测全绿 | `gridEntries()` 一处生成"图 + 原数组下标"，渲染和点击共用 | `tests/filters.test.ts` 第一条 + 真机截图对比 |
+| 2 | 搜索词搜不到，冷门标签几乎必然 0 条 | 浏览用的**随机页码**被套到了搜索上：safebooru `pid` 随机到 8000，等于去翻结果集第 16 万条；`wuthering_waves` 只有几百条 → `[]` | 随机只作用于浏览，搜索永远是 `page-1`；两条测试成对守着（`search_uses_a_deterministic_page` / `browse_keeps_the_random_page_index`） | `live_reported_keywords_are_searchable`（四个词逐个验） |
+| 3 | 词表里明明有别名，英文照样搜不到 | `to_source_query` 对纯 ASCII **直接跳过词表**，于是 `wuwa`/`lycoris` 这些写在词表里的英文别名永远命中不了 | 词表优先（ASCII 先归一小写再查）；再加 `wildcardFallback`：精确 0 条时补 `*`，并把"这是放宽过的结果"写进 `notice` | 同上 + `live_safebooru_prefix_fallback_recovers_an_unknown_tag` |
+
+顺带做的两件事：**比例筛选**（三个档位，规则在 `src/lib/filters.ts`，有测试），
+和**前端有自己的测试了**（`npm run test:web`，进 CI）。之前前端只有 tsc + vite 两道门，
+挡不住"逻辑对、规则错"这类问题——这次的第 1 条和第 3 条都属于这一类。
 
 ### 未做（这就是接下来的活）
 
@@ -77,6 +98,9 @@
   见 `docs/SOURCES-CN.md` §0.1 第 1 条
 - ✅ webp：**产品决定"不为了体积砍体验"**，加了 `image` 解码器并把 `current.jpg` 统一转成
   JPEG（安装包 +0.23 MB，已实测）。夜轻图源仍不接，卡在"纯文本行 + 无缩略图"
+- ✅ 比例筛选（显示器 / 平板 / 手机）：客户端筛，和分辨率档位可以叠加。
+  **已知局限**：360 基本全是横图、safebooru 的浏览模板带 `width:>=1920`，所以"手机"档
+  在那两个源上常常是空的；竖图最稳的来源是 lolicon。见债表
 - ✅ 发布：`v0.1.2` tag + GitHub Release（带 NSIS 安装包）
   https://github.com/Remblued/MoeWallpaper/releases/tag/v0.1.2
 - ❌ 定时切换
@@ -140,20 +164,24 @@ npx tsc --noEmit
 | job | 跑什么 | 为什么放 `windows-latest` |
 |---|---|---|
 | `rust` | `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings` / `cargo test` | 代码里有 `user32` / `dwmapi` / `advapi32` 的 FFI 和 `#[cfg(windows)]`，Linux 上编不过 |
-| `web` | `npm ci` / `npx tsc --noEmit` / `npx vite build` | 纯前端，放 `ubuntu-latest` 更便宜也更快 |
+| `web` | `npm ci` / `npx tsc --noEmit` / `npm run test:web` / `npx vite build` | 纯前端，放 `ubuntu-latest` 更便宜也更快 |
 
 几个有意为之的决定：
 
 - **CI 里不 `tauri build`。** release 构建带 LTO + `codegen-units = 1`，一次几分钟，
   而且装出来的包在 CI 里没人用。**体积/冷启动/内存必须真机测**（`docs/BENCHMARK.md` §1
   要求固定机器、固定防护状态），CI 只保证"编得过、测试过、lint 干净、类型对"。
+- **`test:web` 跑的是 `tests/*.test.ts`，零依赖**（Node 自带的 `node:test` + 类型剥离）。
+  网页那条门原来的三个检查（tsc / vite）挡不住"逻辑对但规则错"这类问题——
+  下标错位、比例分档写反，编译完全通得过。所以把筛选规则抽成 `src/lib/filters.ts` 纯函数，
+  再加这一步。`web` job 的 Node 从 20 提到 22 就是为了这个（20 不认识 `.ts` 入口）。
 - **`npm ci` 而不是 `npm install`**：锁文件说什么装什么，CI 里不允许悄悄升级依赖。
 - **`concurrency` 会取消同一分支的上一个 run**：连续 push 时省额度。
-- `#[ignore]` 的 6 个测试（联网 / 改桌面 / 转码）**CI 不跑**，它们本来就是手动门。
+- `#[ignore]` 的 8 个测试（联网 / 改桌面 / 转码 / 真实关键词）**CI 不跑**，它们本来就是手动门。
 - 仓库转 public 之后 Actions 对标准 runner **免费**（之前 private 时 Windows runner 按 2 倍
   计费）。工作流本身一次 3–5 分钟。
 
-**本地等价命令**就是上面那四条（fmt / clippy / test / tsc）；`npx vite build` 是打包
+**本地等价命令**就是上面那五条（fmt / clippy / test / tsc / test:web）；`npx vite build` 是打包
 前那次构建，顺手也跑一下。
 
 **第一次真实运行（2026-10-31，`f4d4ad2`）**：两个 job 全绿——前端 16 秒，Rust 冷缓存
@@ -266,7 +294,8 @@ Meowallpaper/
 list_sources() -> Result<Vec<WallpaperSource>, String>
 
 // 拉一页图。page 从 1 开始。query 不传 = 浏览，传了 = 搜索
-fetch_images(source_id: String, page: u32, query: Option<String>) -> Result<Vec<ImageDto>, String>
+fetch_images(source_id: String, page: u32, query: Option<String>)
+    -> Result<FetchResult, String>          // { images: Vec<ImageDto>, notice: Option<String> }
 
 // 下载 → 缓存 → 复制到 current.jpg → 设成桌面壁纸（一步到位）
 set_wallpaper(image_url: String) -> Result<(), String>
@@ -274,6 +303,11 @@ set_wallpaper(image_url: String) -> Result<(), String>
 // 下载 → 缓存 → 存到用户的「图片」目录，返回绝对路径
 save_image(image_url: String) -> Result<String, String>
 ```
+
+**`fetch_images` 在 2026-11-02 从 `Vec<ImageDto>` 改成了 `FetchResult`**：
+多出来的 `notice` 是"后端为了让结果不为空做了什么"。目前只有一种：
+搜索精确命中 0 条时按前缀放宽（`wildcardFallback`）。放宽来的结果**必须**让用户
+看见"这不是精确匹配"——悄悄放宽比搜不到更糟。`notice` 为 `null` 就表示精确结果。
 
 ### `save_image` 的行为约定（已实现，别改这些）
 
@@ -299,8 +333,17 @@ invoke("fetch_images", { sourceId, page: 1, query: "风景" })      // 搜索
 
 1. **选模板**：有关键词且图源支持搜索 → 用 `search.url`，否则用 `request.url`
 2. **翻译**：`search.english === true` 时查 `search/terms.json`（中文 → 英文标签）。
-   查不到就**原样发出去**，不猜、不拆词、不音译
+   查不到就**原样发出去**，不猜、不拆词、不音译。**纯英文也查词表**（`wuwa` →
+   `wuthering waves`）——否则词表里的英文别名全是摆设
 3. **编码**：交给 `Url::parse`，中文关键词自动百分号编码
+
+还有两条硬规矩（都是 2026-11-02 用真实 bug 换来的，别退回去）：
+
+- **搜索不许随机页码/起点。** 随机是为了解决"每次打开都看到同一批"，而搜索的结果集
+  是用户指定的那一个。safebooru 的 `pid` 随机到 8000 时，`wuthering_waves` 这种几百条的
+  标签几乎必然返回空数组——用户看到的是"搜不到"，代码里一个错都没有。
+- **一次搜索最多两次请求**（精确 → 前缀）。放宽与否由调用方决定，不藏在替换函数里自动重试。
+  打了多少次网络必须能数清。
 
 图源的**实测**搜索行为（不是查文档）：
 
@@ -326,6 +369,8 @@ pub struct ImageDto {
     pub image_url: String,            // 原图地址，设壁纸用
     pub thumbnail_url: String,        // 缩略图；后端保证一定有（缺了就回退成原图）
     pub page_url: Option<String>,     // 作品页，用于标注来源
+    pub width: Option<u32>,           // 原图宽高；图源不提供时为 None（**未知 ≠ 0**）
+    pub height: Option<u32>,
 }
 ```
 
@@ -336,10 +381,14 @@ interface ImageDto {
   imageUrl: string;
   thumbnailUrl: string;
   pageUrl: string | null;
+  width?: number | null;
+  height?: number | null;
 }
 ```
 
 **为什么 `thumbnail_url` 是 `String` 而不是 `Option<String>`**：回退逻辑（没有缩略图就用原图）只该写一次，写在后端。如果前端拿到 `Option`，每个用到它的地方都得处理一次 `null`。
+
+**为什么宽高是 `Option` 而不是 `0`**：`0` 会被当成"特别小"，分辨率/比例筛选就会把未知尺寸的图全筛掉，而用户看到的是"这个图源筛完就空了"。把"不知道"伪装成"很小"是最容易骗过 review 的一种错。
 
 **这是通用原则：能在一处规整好的数据，不要留成"每个使用者都要处理"的形状。**
 
@@ -527,7 +576,11 @@ export async function fetchImages(
 | 详情页没有焦点陷阱（Tab 能跑到覆盖层后面的元素） | `src/main.ts` | 无障碍完善时再加 `inert` 或焦点循环；不影响键盘关闭 |
 | `ToggleChange.kind` 那种"用 String 当枚举"的写法 | 暂无（参考项目里有） | 见到就改成 `enum` |
 | 360 壁纸是**非公开 API**：无文档、无 SLA，随时可能改或关；而且**没有内容分级参数**，只能固定动漫分类 | `sources/builtin/sources.json` | 挂了就改一段 JSON（图源是数据的好处）；内容限制见 `docs/SOURCES-CN.md` §5 |
-| ~~没有 CI~~ | `.github/workflows/ci.yml` | **已还**：Rust 三道门 + 前端 tsc/vite，两个 job。**CI 不打包、不测数字**（体积/内存必须真机测），见 §2.5 |
+| ~~没有 CI~~ | `.github/workflows/ci.yml` | **已还**：Rust 三道门 + 前端三道门（tsc / `test:web` / vite），两个 job。**CI 不打包、不测数字**（体积/内存必须真机测），见 §2.5 |
+| **比例筛选在部分图源上几乎筛不出东西**：360 的 `cid=26` 基本全是横图；safebooru 的**浏览**模板带 `width:>=1920`，而 1080×1920 的竖图宽度是 1080，天然被服务端排除（实测一页里仍有 7–12 张竖图，因为 4K 竖图宽度够）。wallhaven 其实有 `ratios=9x16` 这种服务端参数，但我们的格式做不到"UI 的选择 → 请求参数" | `src/lib/filters.ts` + `sources/builtin/sources.json` | 真正稳的竖图来源是 lolicon（pixiv，不按宽度过滤）。**要根治得给图源格式加"按档位追加参数"的能力**（`request.paramsByRatio` 之类），那属于 v0.2.0 的自定义图源那一批。已经做的事：空结果时的文案会提示"试试下一页或放宽筛选"，不假装筛选坏了 |
+| **safebooru 会偶发直接断连**：2026-11-02 连续测试时出现过 `error sending request`（约 10 s 后失败，代理和直连都失败），而同一 URL 用 PowerShell 1 s 内 200 | 第三方服务，不是我们的代码 | 重试即可。程序会把"走代理"和"直连"两次的失败原因都打出来，所以能看出不是配置问题。别在短时间里反复打同一个接口——会被按 IP 限速 |
+| **网格的下标没有 DOM 级自动化测试**：`data-idx` 必须是 `lastImages` 的下标（不是筛选后的下标），这一点靠 `gridEntries()` 一处生成 + 注释 + `tests/filters.test.ts` 守着，但"渲染出来的 DOM 和点击处理器用的是同一份数据"这件事没有测试能证明 | `src/main.ts::renderGrid` | 要补就得引浏览器测试（playwright 之类），和"轻量"冲突。目前的防线是**结构上只允许一个下标来源**：别在 renderGrid 里再算一遍序号 |
+| **`fetch_images` 的返回形状变了**（`Vec<ImageDto>` → `FetchResult`，2026-11-02） | `sources/dto.rs`、`commands/mod.rs`、`lib/api.ts` | 已经三处同步改了。以后改契约要同时看 `docs/SOURCES-CN.md`、`src/lib/sources/schema.ts`、本文件 §4 |
 | **`bench/make_icon.py` 的旧版本里有一个个人路径**（某人的图片目录），出现在提交 `d0d6373` | `bench/make_icon.py` | HEAD 已清掉（改成参数 / `MOE_ICON_SRC`）。**历史没重写**：重写会改掉之后所有提交的哈希、还要移动 `v0.1.2` tag，代价远大于这个泄漏。**别以为历史是干净的** |
 | **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | **SignPath Foundation 申请被拒（2026-10-31）**：唯一原因是项目还没有公开传播度（他们要看 star/fork/contributor、外部文章、独立讨论、机构背书）。**决定：先攒传播度再申请**，清单与两份发帖草稿在 `docs/LAUNCH.md`。付费方案不可行：Starter $500/年且证书只签发给法人主体（`docs/SIGNPATH.md` §0.1）。`release.yml` 的签名步骤保留，重新通过后配变量即可。等它之前：每个 Release 必须写 SHA-256 |
 
@@ -563,7 +616,11 @@ export async function fetchImages(
 | **搜索结果明显不相关 / 搜什么都有一堆图** | 该接口的搜索是**相关性排序而不是精确匹配**（nekos.best 就是这样：`zzzznotexist` 也返回 5 张） | 先搜一个保证不存在的词验证。若它不返回空集，正确做法是**摘掉 `search` 块**让界面禁用，而不是加后置过滤——过滤后搜番名会几乎全空，比现在更像坏了。见 `docs/SOURCES-CN.md` §9.5 |
 | 翻到很深的页 → 报错里写着 `API limited due to abuse` | safebooru 对异常 `pid` 返回 **XML** 而不是 JSON | 正常使用（连发 6 次）不会触发；错误信息现在会带上正文开头，能直接认出来 |
 | 界面点了没反应 | 前端运行时异常，不是 Rust 崩了 | 窗口里 `F12` 看 Console 第一行红字 |
-| 在 AI harness / DSH 里跑 `npm run tauri build` 报 `unrecognized subcommand 'D:\...\DSH Desktop.exe'` | **不是 Tauri 也不是项目的问题**：那个环境里 `node` 其实是 DSH 的 Electron 可执行文件，`process.argv[0]` 是它自己，`@tauri-apps/cli/tauri.js` 推断二进制名失败就把该路径当成子命令 | 用真终端跑 `npm run tauri build`。必须留在 harness 里打包时，先改写 `process.argv` 再 require `tauri.js`（`bench/measure/tauri-cli-workaround.js`）。**别为这个改 `package.json` 或降 CLI 版本** |
+| 在 AI harness / DSH 里跑 `npm run tauri build` 报 `unrecognized subcommand 'D:\...\DSH Desktop.exe'` | **不是 Tauri 也不是项目的问题**：那个环境里 `node` 其实是 DSH 的 Electron 可执行文件，`process.argv[0]` 是它自己，`@tauri-apps/cli/tauri.js` 推断二进制名失败就把该路径当成子命令 | 用真终端跑 `npm run tauri build`。必须留在 harness 里打包时，先改写 `process.argv` 再 require `tauri.js`（`bench/measure/tauri-cli-workaround.cjs`）。**别为这个改 `package.json` 或降 CLI 版本** |
+| 同一个脚本报 `require is not defined in ES module scope` | `package.json` 里有 `"type": "module"`，`.js` 会被当成 ESM，而那个脚本用的是 CommonJS | 扩展名改成 `.cjs`（已改）。**这不是"降级"，是让文件扩展名和模块制式对上** |
+| `node --test tests/` 报 `Cannot find module ...\tests`，或测试里报了 0 个 | harness 里的 `node` 是宿主 Electron（`node:electron/js2c/...`），它的 `--test` 行为不一样 | 用真 Node（`C:\Program Files\nodejs\node.exe`）跑 `npm run test:web`。CI 里用 `actions/setup-node` 的 22，不受影响 |
+| **点缩略图，打开的大图是隔壁那张**（只在开了筛选、且筛掉了不止一张时出现） | 卡片上写的是**筛选后**的序号，点击处理器拿它去查**未筛选**的完整数组，筛掉几张后面全体错位 | 已修（2026-11-02）：`gridEntries()` 一处生成"图 + 它在原数组里的下标"，渲染和点击共用同一个下标。**别在 `renderGrid` 里重新算序号** |
+| **某个关键词怎么都搜不到，换英文也一样** | 两种原因：① 该图源的分页随机被套到了搜索上（页码被扔到结果集第 16 万条）；② booru 标签和口语不同（`lycoris` 不存在，`lycoris_recoil` 才是） | 搜索不许随机（见 §4"两条硬规矩"）；booru 类图源配 `search.wildcardFallback: true`。都在 2026-11-02 修好，`docs/SOURCES-CN.md` §9.6 有实测表 |
 | 打包好的 exe 双击不弹窗、也不出界面；PowerShell 启动则几十毫秒就退出，退出码 `-2147483645`，事件日志和 WER 都干净 | **不是你的代码**。装了第三方杀软（本机是 Kaspersky 21.26，`KLIF`/`klflt` 内核驱动 hook 进程创建），未签名的构建会被它拦掉。先看 `root/SecurityCenter2` 和运行中的过滤驱动 | 把项目目录加进杀软排除项，或临时暂停防护。测量时两个基线要在同一防护状态下跑 |
 | SignPath 申请表：点 Submit 一直转圈；刷新后按钮点不动 | 那张表是 **HubSpot 嵌入表单**（`js-eu1.hsforms.net`）。系统代理指向一个坏节点时，页面 HTML 可能还能从缓存出来，但**表单脚本加载不全**（按钮没绑定）+ **提交 POST 一直 pending**。2026-10-31 实测：这几个域名直连 200/302，走当时的 `127.0.0.1:7890` 全是 000 | **关系统代理**（或换节点 / 给 `signpath.org`、`*.hsforms.net`、`*.hsforms.com`、`*.hs.net` 设 DIRECT）→ `Ctrl+Shift+R` 硬刷新 → 关掉广告拦截扩展。**先查邮箱确认上一次是否其实提交成功**——成功过之后再提交就会表现为点不动。真不行就发 <https://signpath.io/support> 并附 `docs/SIGNPATH.md` 的材料 |
 

@@ -133,6 +133,23 @@ pub struct SearchSpec {
     /// 不转的话，中文搜索**逢多词必 0 条**，表现是"这个图源不能搜索"。
     #[serde(default)]
     pub underscore_tags: bool,
+    /// 精确标签搜到 0 条时，给标签补一个结尾 `*` 再试一次。
+    ///
+    /// **为什么需要**：booru 的标签是"全站用户约定"的，和口语差得很远——
+    /// `lycoris` 不是标签，`lycoris_recoil` 才是；`elaina` 不存在，
+    /// `elaina_(majo_no_tabitabi)` 才是（2026-11-02 实测）。
+    /// 用户没有义务背这些括号和空格，而"搜不到"和"这个词没有图"在界面上
+    /// 完全无法区分，是最容易让人放弃这个功能的一种死法。
+    ///
+    /// Gelbooru 系的 `tags` 支持 `前缀*`，所以补一个星号就能把
+    /// `lycoris` → `lycoris_recoil`、`elaina` → `elaina_(majo_no_tabitabi)` 找回来。
+    ///
+    /// **代价必须说清**：前缀匹配是模糊的，会带出"名字以它开头"的别的东西
+    /// （实测 `wuwa*` 命中的是画师标签 `wuwa_myurang`，只是凑巧也是那款游戏的图）。
+    /// 所以它只在**精确搜到 0 条**时发生，而且界面必须写明"这是前缀扩展的结果"，
+    /// 不能装作和精确搜索一样。
+    #[serde(default)]
+    pub wildcard_fallback: bool,
 }
 
 /// 单个图源。

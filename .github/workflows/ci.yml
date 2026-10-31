@@ -1,4 +1,4 @@
-# GitHub Actions：三道门（Rust）+ 两道门（前端）。
+# GitHub Actions：三道门（Rust）+ 三道门（前端）。
 #
 # 为什么是这两个 job 而不是一个：Rust 和前端用的工具链完全不同，混在一个 job 里
 # 任何一个红了都会挡住另一个的反馈；拆开还能并行跑，墙钟时间更短。
@@ -56,14 +56,16 @@ jobs:
         run: cargo test
 
   web:
-    name: Frontend (tsc / vite build)
+    name: Frontend (tsc / vite build / node:test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # 22 而不是 20：`test:web` 直接跑 .ts（Node 的类型剥离），22.6 起才有。
+      # 20 上这条会以"不支持 .ts"失败，而不是悄悄跳过——那也算拦住了，但没必要。
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # npm ci 而不是 npm install：锁文件说什么就装什么，CI 里不允许悄悄升级。
@@ -72,6 +74,12 @@ jobs:
 
       - name: tsc --noEmit
         run: npx tsc --noEmit
+
+      # 筛选/下标这类纯逻辑的测试：零依赖，跑的是 tests/*.test.ts。
+      # 为什么值得单独一步：这些规则错了以后界面**看起来完全正常**
+      # （筛掉几张就整列错位），靠手测发现不了——就是用户报上来的那个 bug。
+      - name: test:web
+        run: npm run test:web
 
       - name: vite build
         run: npx vite build

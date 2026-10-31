@@ -11,6 +11,9 @@ import { invoke } from "@tauri-apps/api/core";
 export interface SearchSpec {
   url: string;
   english?: boolean;
+  underscoreTags?: boolean;
+  /** 精确标签搜到 0 条时，后端会不会补前缀再试一次。 */
+  wildcardFallback?: boolean;
 }
 
 /** 与后端 WallpaperSource 序列化结果对应（camelCase）。 */
@@ -35,6 +38,19 @@ export interface ImageDto {
   height?: number | null;
 }
 
+/**
+ * 一次拉取的结果（对应后端 FetchResult）。
+ *
+ * 为什么不直接返回 `ImageDto[]`：搜索可能走到"前缀扩展"那条路，
+ * 而放宽过的结果**必须**在界面上说清楚。悄悄放宽、让用户以为精确搜到了，
+ * 比搜不到更糟。
+ */
+export interface FetchResult {
+  images: ImageDto[];
+  /** `null` = 这就是精确结果，没做任何让步。 */
+  notice: string | null;
+}
+
 /** 返回内置图源列表。 */
 export async function listSources(): Promise<WallpaperSource[]> {
   return invoke<WallpaperSource[]>("list_sources");
@@ -45,8 +61,8 @@ export async function fetchImages(
   sourceId: string,
   page: number,
   query?: string,
-): Promise<ImageDto[]> {
-  return invoke<ImageDto[]>("fetch_images", {
+): Promise<FetchResult> {
+  return invoke<FetchResult>("fetch_images", {
     sourceId,
     page,
     query,

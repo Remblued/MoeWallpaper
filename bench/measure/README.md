@@ -25,7 +25,7 @@
 | 文件 | 干什么 | 产出 |
 |---|---|---|
 | `lib-window.ps1` | 公共件：挑窗口 / 等窗口 / 关窗口 / 声明 DPI 感知。**别绕过它直接用 `MainWindowHandle`** | — |
-| `tauri-cli-workaround.js` | 在 AI harness 里打包（那里 `node` 其实是宿主 Electron exe，CLI 会误判 argv） | 安装包与 exe |
+| `tauri-cli-workaround.cjs` | 在 AI harness 里打包（那里 `node` 其实是宿主 Electron exe，CLI 会误判 argv） | 安装包与 exe |
 | `measure-startup.ps1` | 冷启动：10 发，CreateProcess → 标题窗口出现，10 ms 轮询（§2.3 口径） | README「冷启动 39.5 ms」 |
 | `measure-memory.ps1` | 空闲内存：整棵树 + 每个进程的角色，60 秒静置 | 有图 3 次采样（307.7 MB 中位） |
 | `measure-offline.ps1` | 同一套内存口径，但把 `HTTP(S)_PROXY` 指向 `127.0.0.1:1` 挡住取图 | 无图 3 次采样（231.0 MB 中位） |
@@ -39,7 +39,7 @@
 
 ```powershell
 # 1) 打包（等价于 npm run tauri build；在仓库根跑）
-node bench\measure\tauri-cli-workaround.js build
+node bench\measure\tauri-cli-workaround.cjs build
 
 # 2) 装到一个空目录（NSIS 静默参数：/D= 必须是最后一个参数、不加引号）
 .\src-tauri\target\release\bundle\nsis\MoeWallpaper_0.1.2_x64-setup.exe /S /D=D:\bench\install

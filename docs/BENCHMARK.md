@@ -600,7 +600,7 @@ cargo test -- --ignored --nocapture live_360_source_works_end_to_end
   `process.argv[0]` 是 `D:\apps\deepseek harness\DSH Desktop\DSH Desktop.exe`。
   `@tauri-apps/cli/tauri.js` 用它推断自己的二进制名，推断失败就把这个路径当成子命令
   塞到参数最前面。绕法：先改写 `process.argv` 再 require 它
-  （`bench/measure/tauri-cli-workaround.js`，几行）。**这不是项目问题，是测量环境问题，
+  （`bench/measure/tauri-cli-workaround.cjs`，几行）。**这不是项目问题，是测量环境问题，
   别写进 README。**
 - **截图会截到别人的窗口。** `CopyFromScreen` 抄的是屏幕，不是窗口；启动的窗口没有
   前台焦点时，截出来的是压在它上面的东西（第一次截到了旁边的 AI 客户端窗口，第二次

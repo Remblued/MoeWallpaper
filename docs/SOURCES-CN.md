@@ -182,6 +182,7 @@ img_1024_768      1024×768     93,512 B   bdm/1024_768_85/
 - `filter.randomOffsetMax`：把 `{offset}` 换成**随机起点**。360 的列表是固定顺序，
   第 1 页永远是那 20 张；配 `8000` 后每次从 `[0,8000)` 里随机取 20 的倍数，
   "翻页"就变成了"换一批"，效果对齐 wallhaven 的 `sorting=random`
+- `search.wildcardFallback`：精确标签搜到 0 条时，补一个结尾 `*` 再试一次（见 §9.6）
 
 落地时配的测试：
 
@@ -437,6 +438,50 @@ README 原来写的"另外三个海外图源国内直连一个都打不开"已�
 顺带修正一条旧结论：nekos.best **是给尺寸的**（浏览和搜索响应里都有
 `dimensions.width/height`），之前"它不提供尺寸"的说法过时了，现在已映射成宽高，
 分辨率筛选对它生效。
+
+### 9.6 2026-11-02：搜索"搜不到"的两个真正原因
+
+用户报：`鸣潮`/`wuwa`/`伊雷娜`/`lycoris` 在 safebooru 上都搜不到。逐个查下来是**两个独立的错**，
+而且都在我们这边——服务端的标签一直是好的。
+
+**原因一：随机页码被用在了搜索上。** `filter.randomPageIndexMax` 本来只该解决"浏览时永远是
+同一批图"（§0.1 第 1 条），但它被无条件套到了搜索请求里。safebooru 的 `pid` 是 0 起页码、
+每页 20 条，随机到 8000 → 服务端去翻结果集第 16 万条：
+
+| 请求 | 结果 |
+| --- | --- |
+| `tags=rating:general+wuthering_waves&pid=0` | 200，有 20 条 |
+| `tags=rating:general+wuthering_waves&pid=5000` | **200 + `[]`** |
+
+冷门标签（`wuthering_waves` 总量几百条 → 十几页）在 99% 的随机取值下都是空数组。
+界面上只有一句"没搜到"，**和"这个词没有图"完全无法区分**，而且不会报任何错。
+现在随机只作用于浏览；搜索永远是确定的 `page - 1`。
+
+**原因二：booru 的标签和人的说法不是一回事。** 标签是"全站用户约定"，带括号、带后缀：
+
+| 用户打的词 | 精确标签 | 实测 |
+| --- | --- | --- |
+| `lycoris` | 不存在（`lycoris_recoil` 才是） | 200 + 0 字节 |
+| `lycoris*`（前缀） | → `lycoris_recoil` | 20 条 |
+| `elaina` | 不存在（`elaina_(majo_no_tabitabi)` 才是） | 200 + 0 字节 |
+| `elaina*` | → `elaina_(majo_no_tabitabi)` | 20 条 |
+| `wuwa` | 不存在 | 200 + 0 字节 |
+| `wuwa*` | 命中**画师标签** `wuwa_myurang` | 20 条（凑巧也是那款游戏的图） |
+
+最后一行是这条机制的代价：**前缀匹配是模糊的**。所以它只在精确搜到 0 条时才发生，
+而且结果里 `notice` 必须写明"这是按前缀扩展的结果"。宁可承认模糊，也不装作精确。
+
+三处修正：
+
+- `search.wildcardFallback: true`（只有 safebooru 开；不认 `*` 的接口别开，白发一次请求）
+- 词表开始**也查纯英文**：`wuwa` → `wuthering waves`、`lycoris` → `lycoris recoil`。
+  原来的写法是"ASCII 直接小写返回"，于是词表里写好的英文别名全成了摆设
+- 一次搜索最多打 **两次**请求（精确 → 前缀）。放宽这件事由调用方决定，
+  不藏在替换函数里自动重试——一次搜索打了多少次网络必须能数清
+
+回归测试：`live_reported_keywords_are_searchable`（四个词逐个验，非联网不跑）
++ `search_uses_a_deterministic_page` / `browse_keeps_the_random_page_index`
+（一对，缺一条就会把另一半修坏）。
 
 ## 10. 结论（截至 2026-10-31）
 

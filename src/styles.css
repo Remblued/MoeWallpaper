@@ -103,6 +103,14 @@ body {
   cursor: pointer;
 }
 
+/* 两个筛选下拉贴在一起、不跟着伸缩：它们是同一类东西（"我要什么样的图"），
+   撑开会把搜索框挤到第二行，而搜索才是这一行里最常用的。 */
+.toolbar select.filter-select {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: none;
+}
+
 .toolbar select:disabled {
   opacity: 0.6;
   cursor: not-allowed;

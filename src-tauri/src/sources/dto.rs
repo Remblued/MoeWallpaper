@@ -28,6 +28,20 @@ pub struct ImageDto {
     pub height: Option<u32>,
 }
 
+/// 一次拉取的结果：图片 + 一句"这次做了什么额外动作"。
+///
+/// 为什么不是直接返回数组：搜索可能走到"前缀扩展"那条路（见
+/// `SearchSpec::wildcard_fallback`），而放宽过的结果**必须**在界面上说清楚。
+/// 悄悄放宽、让用户以为精确搜到了，比搜不到更糟——他会以为自己搜的词
+/// 真的有一堆这种图。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchResult {
+    pub images: Vec<ImageDto>,
+    /// `None` = 这就是精确结果，没做任何让步。
+    pub notice: Option<String>,
+}
+
 impl From<ImageRef> for ImageDto {
     fn from(r: ImageRef) -> Self {
         // 先把兜底算出来，再移动字段。

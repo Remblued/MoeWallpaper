@@ -162,6 +162,7 @@ Two rules keep this honest:
 | Keyword search (Chinese tag dictionary, per-source search endpoints) | ✅ |
 | Pagination | ✅ |
 | Resolution filter (≥1080p / ≥1440p / ≥4K) | ✅ |
+| Shape filter: monitor (wide) / tablet (4:3, 3:2) / phone (portrait) | ✅ |
 | Dark / light / glass themes, remembered; **glass is real system Acrylic — the desktop shows through** | ✅ |
 | One-click wallpaper (Win32 `SystemParametersInfo`) | ✅ |
 | **JPEG / PNG / WebP / GIF wallpapers** (webp is transcoded to JPEG, no Store extension needed) | ✅ |
@@ -169,7 +170,11 @@ Two rules keep this honest:
 | Local cache (thumbnails, current wallpaper) | ✅ |
 | Declarative JSON sources | ✅ |
 | Domestic (CN) sources | ✅ 360 Wallpaper (the default source) |
-| CI (fmt / clippy / test / tsc / vite on GitHub Actions) | ✅ |
+| CI (fmt / clippy / test / tsc / vite / node:test on GitHub Actions) | ✅ |
+
+> **That table describes the `v0.1.2` release.** `main` carries unreleased work:
+> the shape filter, the search fixes (see [handover](docs/HANDOVER.md) §1), and
+> frontend unit tests. Version number and installer move when it ships.
 | Scheduled rotation | ❌ deliberately cut, see below |
 
 ### Not in v0.1.0

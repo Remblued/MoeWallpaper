@@ -23,11 +23,17 @@
           disabled
           aria-label="搜索壁纸"
         />
-        <select id="res-select" aria-label="最低分辨率">
+        <select id="res-select" class="filter-select" aria-label="最低分辨率" title="最低分辨率">
           <option value="any">全部分辨率</option>
-          <option value="fhd">≥ 1920×1080</option>
-          <option value="qhd">≥ 2560×1440</option>
-          <option value="uhd">≥ 3840×2160</option>
+          <option value="fhd" title="1920×1080 及以上">≥ 1080p</option>
+          <option value="qhd" title="2560×1440 及以上">≥ 1440p</option>
+          <option value="uhd" title="3840×2160 及以上">≥ 4K</option>
+        </select>
+        <select id="ratio-select" class="filter-select" aria-label="图片比例" title="按屏幕形状筛：显示器是横屏，手机是竖屏">
+          <option value="any">任意比例</option>
+          <option value="desktop" title="宽高比 ≥ 1.6：1920×1080、1920×1200、3440×1440 等">显示器（宽屏）</option>
+          <option value="tablet" title="宽高比 1.15~1.6 或 0.62~0.87：2048×1536、3000×2000 等">平板（4:3）</option>
+          <option value="phone" title="宽高比 &lt; 0.62：1080×1920、1080×2400、1440×3200 等">手机（竖屏）</option>
         </select>
         <button id="theme-toggle" class="icon-btn" type="button" aria-label="切换主题">🌙</button>
       </header>

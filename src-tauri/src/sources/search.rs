@@ -46,15 +46,28 @@ pub fn to_source_query(keyword: &str, english: bool) -> String {
         return keyword.to_string();
     }
 
-    // 英文已经很准确，不必过词表
-    if keyword.is_ascii() {
-        return keyword.to_ascii_lowercase();
+    // 词表优先，**纯英文也查**。
+    //
+    // 原来的写法是"ASCII 就直接小写返回，不过词表"，理由是"英文已经很准确"。
+    // 实测下来这句话是错的：`wuwa`、`lycoris` 都是用户会打的英文，也都不等于
+    // booru 的标签（`wuthering_waves` / `lycoris_recoil`）。跳过词表等于
+    // 把"词表里明明写了"的别名全部作废，而且不作废的那部分用户也发现不了——
+    // 界面上只有一句"没搜到"。
+    //
+    // ASCII 先归一成小写再查：用户会打 `Lycoris`，词表里存的是小写。
+    // 中文没有大小写，原样查。
+    let lookup = if keyword.is_ascii() {
+        keyword.to_ascii_lowercase()
+    } else {
+        keyword.to_string()
+    };
+
+    if let Some(hit) = table().and_then(|t| t.get(&lookup)) {
+        return hit.clone();
     }
 
-    table()
-        .and_then(|t| t.get(keyword))
-        .cloned()
-        .unwrap_or_else(|| keyword.to_string())
+    // 查不到就原样发出去，不猜、不拆词、不音译
+    lookup
 }
 
 #[cfg(test)]
@@ -88,6 +101,24 @@ mod tests {
     #[test]
     fn english_is_lowercased_not_translated() {
         assert_eq!(to_source_query("Sakura", true), "sakura");
+    }
+
+    /// 英文别名也要走词表。
+    ///
+    /// 挡的是"`wuwa` 搜不到鸣潮"：用户打的是英文缩写，booru 上的标签是
+    /// `wuthering_waves`。词表里写了这条，但代码曾经一律跳过 ASCII 输入，
+    /// 于是它永远命中不了——测试要挡的正是这种"配了等于没配"。
+    #[test]
+    fn ascii_aliases_in_the_table_are_applied() {
+        assert_eq!(to_source_query("wuwa", true), "wuthering waves");
+        assert_eq!(to_source_query("Lycoris", true), "lycoris recoil");
+        assert_eq!(to_source_query("re0", true), "re:zero");
+    }
+
+    /// 但词表里没有的英文不能被"猜"成别的词。
+    #[test]
+    fn unknown_ascii_passes_through_lowercased() {
+        assert_eq!(to_source_query("Miku", true), "miku");
     }
 
     #[test]

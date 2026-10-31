@@ -139,6 +139,7 @@ Electron 那 356.77 MB 不是虚胖出来的：光 `BaselineElectron.exe` **一�
 | 关键词搜索（中文词表 + 各图源自己的搜索端点） | ✅ |
 | 翻页 | ✅ |
 | 分辨率筛选（≥1080p / ≥1440p / ≥4K） | ✅ |
+| 比例筛选：显示器（宽屏）/ 平板（4:3、3:2）/ 手机（竖屏） | ✅ |
 | 深色 / 浅色 / 玻璃三种主题，记住选择；**玻璃主题是系统 Acrylic，桌面真的透上来** | ✅ |
 | 一键设壁纸（Win32 `SystemParametersInfo`） | ✅ |
 | **JPEG / PNG / WebP / GIF 都能设成壁纸**（webp 先转码成 JPEG，不依赖商店扩展） | ✅ |
@@ -146,7 +147,10 @@ Electron 那 356.77 MB 不是虚胖出来的：光 `BaselineElectron.exe` **一�
 | 本地缓存（缩略图 + 当前壁纸） | ✅ |
 | 声明式 JSON 图源 | ✅ |
 | 国内直连图源 | ✅ 360 壁纸（默认图源） |
-| CI（fmt / clippy / test / tsc / vite，GitHub Actions） | ✅ |
+| CI（fmt / clippy / test / tsc / vite / node:test，GitHub Actions） | ✅ |
+
+> **上表是 `v0.1.2` 发布版的样子。** `main` 上还有一批**未发版**的改动：比例筛选、
+> 搜索修复（见 [交接文档](docs/HANDOVER.md) §1）、前端单测。发版时版本号和安装包会一起更新。
 | 定时切换 | ❌ 明确不做，见下 |
 
 ### v0.1.0 明确不做

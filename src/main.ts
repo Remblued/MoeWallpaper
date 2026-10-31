@@ -6,7 +6,14 @@
  */
 
 import { listSources, fetchImages, setWallpaper, saveImage } from "./lib/api";
-import type { ImageDto, WallpaperSource } from "./lib/api";
+import type { FetchResult, ImageDto, WallpaperSource } from "./lib/api";
+import {
+  gridEntries,
+  parseRatio,
+  parseResTier,
+  NO_FILTER,
+} from "./lib/filters";
+import type { FilterState } from "./lib/filters";
 import { USE_MOCK, mockImages, mockDelay } from "./lib/mock";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
@@ -20,6 +27,7 @@ const prevBtn      = document.getElementById("prev-page") as HTMLButtonElement;
 const nextBtn      = document.getElementById("next-page") as HTMLButtonElement;
 const pageLabel    = document.getElementById("page-label") as HTMLSpanElement;
 const resSelect    = document.getElementById("res-select") as HTMLSelectElement;
+const ratioSelect  = document.getElementById("ratio-select") as HTMLSelectElement;
 const themeBtn     = document.getElementById("theme-toggle") as HTMLButtonElement;
 const sourceNoteEl = document.getElementById("source-note") as HTMLParagraphElement;
 
@@ -27,24 +35,14 @@ const sourceNoteEl = document.getElementById("source-note") as HTMLParagraphElem
 let currentSourceId = "";
 let currentQuery = "";               // 当前搜索词，空串 = 浏览模式
 let loadSeq = 0;                     // 请求序号，过期响应直接丢弃
-let lastImages: ImageDto[] = [];     // 最近一次渲染的图片列表，供点击处理器读取
+let lastImages: ImageDto[] = [];     // 最近一次拉到的**完整**一页，供点击处理器按下标取图
+let lastNotice: string | null = null;// 后端"为了让结果不为空做了什么"的提示
 let allSources: WallpaperSource[] = []; // 缓存图源列表，用于判断 search 能力
 let currentPage = 1;                 // 当前页码，从 1 开始
 let hasMorePages = false;            // 上一页拿满了才认为有下一页
 
-/**
- * 分辨率档位 → 最低像素总数。
- *
- * 为什么比像素总数而不是"宽 ≥ x 且 高 ≥ y"：竖屏壁纸（1080×1920）和横屏
- * （1920×1080）像素数一样，都该算 1080p。逐边比较会把竖图全判掉。
- */
-const RES_TIERS: Record<string, number> = {
-  any: 0,
-  fhd: 1920 * 1080,
-  qhd: 2560 * 1440,
-  uhd: 3840 * 2160,
-};
-let minPixels = 0;                   // 0 = 不筛选
+/** 当前筛选条件。规则在 `lib/filters.ts`，那边有测试。 */
+let filter: FilterState = { ...NO_FILTER };
 
 // ── 工具 ────────────────────────────────────────────────────
 
@@ -352,36 +350,64 @@ function renderError(err: unknown) {
   gridEl.innerHTML = "";
 }
 
-function renderGrid(images: ImageDto[], totalOnPage = images.length) {
-  const pageText = currentPage > 1 ? `第 ${currentPage} 页 · ` : "";
-  const hidden = totalOnPage - images.length;
+// ── 筛选与网格 ──────────────────────────────────────────────
 
-  if (hidden > 0 && images.length === 0) {
+/** 当前生效的筛选条件（中文说法），用于状态栏文案。 */
+function activeFilterLabel(): string {
+  const parts: string[] = [];
+  if (filter.minPixels > 0) parts.push("分辨率");
+  if (filter.ratio !== "any") parts.push("比例");
+  return parts.join("和");
+}
+
+/**
+ * 只重画，不联网。
+ *
+ * 参数一个都不收：**永远从 `lastImages` + 当前 `filter` 出发**。
+ * 收"某个列表"当参数的话，调用方就有可能传进来一个和 `lastImages`
+ * 不同源的数组，下标再次失配——那正是这次修掉的 bug。
+ */
+function renderGrid() {
+  const entries = gridEntries(lastImages, filter);
+  const total = lastImages.length;
+  const hidden = total - entries.length;
+  const pageText = currentPage > 1 ? `第 ${currentPage} 页 · ` : "";
+  const noticeText = lastNotice ? `（${lastNotice}）` : "";
+
+  if (total > 0 && entries.length === 0) {
     // 整页被筛空有两种完全不同的原因，说法必须分开：
     // 图源不报尺寸（如 nekos.best）时筛选对它根本无效，说"没有够大的图"是误导。
     const unknown = lastImages.filter((img) => !img.width || !img.height).length;
+    // 比例档还多一种情况：有些图源的列表本身就偏横图（360 全是横屏壁纸，
+    // safebooru 的浏览模板还带着 width:>=1920）。这时"换一页"多半还是空，
+    // 换图源才是正解，所以要单独说。
+    const hint =
+      filter.ratio !== "any"
+        ? "试试下一页，或换个图源（有些图源的列表以横图为主）"
+        : "试试下一页或放宽筛选";
+
     statusEl.textContent =
-      unknown === totalOnPage
-        ? `${pageText}这个图源不提供图片尺寸，无法按分辨率筛选（本页 ${totalOnPage} 张）`
-        : `${pageText}本页没有达到该分辨率的图片（共 ${totalOnPage} 张）`;
+      unknown === total
+        ? `${pageText}这个图源不提供图片尺寸，无法按${activeFilterLabel()}筛选（本页 ${total} 张）`
+        : `${pageText}本页没有符合${activeFilterLabel()}的图片（共 ${total} 张）——${hint}`;
   } else {
     statusEl.textContent =
       hidden > 0
-        ? `${pageText}共 ${images.length} 张（按分辨率筛掉 ${hidden} 张）`
-        : `${pageText}共 ${images.length} 张图片`;
+        ? `${pageText}共 ${entries.length} 张（按${activeFilterLabel()}筛掉 ${hidden} 张）${noticeText}`
+        : `${pageText}共 ${entries.length} 张图片${noticeText}`;
   }
   statusEl.className = "status";
 
-  gridEl.innerHTML = images
-    .map((img, idx) => {
+  gridEl.innerHTML = entries
+    .map(({ img, index }, position) => {
       const dims = img.width && img.height ? `${img.width}×${img.height} · ` : "";
       const title = esc(dims + (img.pageUrl ?? img.imageUrl));
       const thumb = esc(img.thumbnailUrl);
       return `
-    <button class="card" data-idx="${idx}" title="${title}">
+    <button class="card" data-idx="${index}" title="${title}">
       <img
         src="${thumb}"
-        alt="壁纸 ${idx + 1}"
+        alt="壁纸 ${position + 1}"
         loading="lazy"
         decoding="async"
       />
@@ -398,35 +424,13 @@ function renderGrid(images: ImageDto[], totalOnPage = images.length) {
   });
 }
 
-// ── 分辨率筛选 ──────────────────────────────────────────────
-
-/**
- * 按当前档位过滤一页图片。
- *
- * 尺寸未知的图在设了档位时**一律筛掉**：没有尺寸就是没有证据，
- * 不能因为"看着还行"就放进来——那样用户会以为筛选是坏的。
- * 界面上会显示"筛掉 N 张"，所以用户能看见这件事发生。
- */
-function visibleImages(images: ImageDto[]): ImageDto[] {
-  if (minPixels === 0) return images;
-
-  return images.filter((img) => {
-    if (!img.width || !img.height) return false;
-    return img.width * img.height >= minPixels;
-  });
-}
-
-/** 不重新联网，只用当前这一页的数据重画。 */
-function refreshGrid() {
-  renderGrid(visibleImages(lastImages), lastImages.length);
-}
-
 // ── 事件委托：点缩略图 → 打开详情页 ─────────────────────────
 
 gridEl.onclick = (e) => {
   const btn = (e.target as HTMLElement).closest(".card") as HTMLButtonElement | null;
   if (!btn || btn.classList.contains("card--skeleton")) return;
 
+  // data-idx 是 lastImages 里的下标（见 gridEntries 的注释），不是网格里的位置
   const idx = Number(btn.dataset.idx);
   const img = lastImages[idx];
   if (!img) return;
@@ -496,35 +500,41 @@ async function loadImages(sourceId: string, query?: string, page = 1) {
   updatePager();
 
   try {
-    let images: ImageDto[];
+    let result: FetchResult;
 
     if (USE_MOCK) {
       await mockDelay();
-      images = mockImages();
+      result = { images: mockImages(), notice: null };
     } else {
-      images = await fetchImages(sourceId, page, query || undefined);
+      result = await fetchImages(sourceId, page, query || undefined);
     }
 
     // 过期响应：用户已经切到别的图源了，丢弃
     if (seq !== loadSeq) return;
 
+    const images = result.images;
+
     if (images.length === 0) {
       hasMorePages = false;
+      lastNotice = null;
       if (page > 1) {
         // 翻过头了。退回上一页，并把上一页的图放回去——
         // 留一个空白网格会让人以为图源坏了。
         currentPage = page - 1;
         updatePager();
-        if (lastImages.length > 0) refreshGrid();
+        if (lastImages.length > 0) renderGrid();
         showToast("没有更多了");
       } else {
         updatePager();
+        // 空结果不需要 notice：后端只在"放宽后拿到了图"时才给提示，
+        // 放宽也空的时候它返回的就是精确的 0 条，这里照实说"没搜到"。
         renderEmpty(!!query);
       }
     } else {
       lastImages = images;
+      lastNotice = result.notice;
       hasMorePages = images.length >= FULL_PAGE_HINT;
-      refreshGrid();
+      renderGrid();
       updatePager();
     }
   } catch (err) {
@@ -600,10 +610,15 @@ async function init() {
       }
     };
 
-    // 分辨率筛选：只重画当前页，不重新联网
+    // 筛选：只重画当前页，不重新联网。
+    // 两个筛选互不影响，可以叠加（"4K 横屏壁纸"就是一个合法组合）。
     resSelect.onchange = () => {
-      minPixels = RES_TIERS[resSelect.value] ?? 0;
-      if (lastImages.length > 0) refreshGrid();
+      filter = { ...filter, minPixels: parseResTier(resSelect.value) };
+      if (lastImages.length > 0) renderGrid();
+    };
+    ratioSelect.onchange = () => {
+      filter = { ...filter, ratio: parseRatio(ratioSelect.value) };
+      if (lastImages.length > 0) renderGrid();
     };
 
     // 初始化搜索框 / 内容提示

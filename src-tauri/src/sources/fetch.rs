@@ -170,47 +170,93 @@ fn apply_sfw_query(url: &str, filter: &SourceFilter) -> String {
     format!("{url}{separator}{query}")
 }
 
-/// 拼出最终要请求的地址。
+/// 给标签补一个结尾 `*`，变成前缀匹配。
 ///
-/// 三件事按顺序做：
-/// 1. **选模板**：有关键词且图源支持搜索 → 用 `search.url`，否则用 `request.url`
-/// 2. **替换占位符**：`{page}` / `{limit}` / `{query}`
-/// 3. **交给 `Url::parse`** 做百分号编码和合法性校验——中文关键词、空格、`&`
-///    全在这一步被正确处理，不用自己写编码
-///
-/// 为什么第二步不做编码、第三步才做：`Url::parse` 是唯一权威。
-/// 手工拼一个"看起来对"的地址，遇到中文就会发出一个坏请求，
-/// 而且错误信息会是"400 Bad Request"，完全看不出是编码问题。
+/// 已经带 `*` 的不重复补；空串原样返回——补成 `*` 会匹配全站任何图，
+/// 那不是"放宽"，那是把筛选条件删了。
+fn widen_tag(tag: &str) -> String {
+    if tag.is_empty() || tag.ends_with('*') {
+        return tag.to_string();
+    }
+
+    format!("{tag}*")
+}
+
+/// 拼出最终要请求的地址：精确匹配。
 fn build_request_url(
     source: &WallpaperSource,
     page: u32,
     query: Option<&str>,
 ) -> Result<reqwest::Url, String> {
+    build_url(source, page, query, false)
+}
+
+/// 拼出最终要请求的地址。
+///
+/// 四件事按顺序做：
+/// 1. **选模板**：有关键词且图源支持搜索 → 用 `search.url`，否则用 `request.url`
+/// 2. **算分页**：搜索用确定的页码；浏览用随机起点（见下面那段注释）
+/// 3. **替换占位符**：`{page}` / `{limit}` / `{pageIndex}` / `{offset}` / `{query}`
+/// 4. **交给 `Url::parse`** 做百分号编码和合法性校验——中文关键词、空格、`&`
+///    全在这一步被正确处理，不用自己写编码
+///
+/// 为什么第三步不做编码、第四步才做：`Url::parse` 是唯一权威。
+/// 手工拼一个"看起来对"的地址，遇到中文就会发出一个坏请求，
+/// 而且错误信息会是"400 Bad Request"，完全看不出是编码问题。
+///
+/// `widen` 为 true 时把标签放宽成前缀匹配（见 `SearchSpec::wildcard_fallback`）。
+/// 要不要放宽由**调用方**决定，不藏在这里自动重试：一次搜索最多打几次网络，
+/// 必须有人能一眼数清。
+fn build_url(
+    source: &WallpaperSource,
+    page: u32,
+    query: Option<&str>,
+    widen: bool,
+) -> Result<reqwest::Url, String> {
     let keyword = query.map(str::trim).filter(|q| !q.is_empty());
 
+    // 只有"真的会走搜索端点"才算搜索：图源没配 `search` 时关键词会被忽略，
+    // 那种情况下仍然是浏览，仍然该有随机。
+    let is_search = keyword.is_some() && source.search.is_some();
+
     // 顺序固定的图源要随机起点，否则"第 1 页"永远是那 20 张。
-    let offset = match source.filter.random_offset_max {
-        Some(max) => random_start_from(random_u64(), max, DEFAULT_LIMIT),
-        None => page.saturating_sub(1).saturating_mul(DEFAULT_LIMIT),
+    //
+    // **搜索不随机。** 随机解决的是"每次打开都看到同一批"，而搜索的结果集
+    // 本来就是用户指定的那一个。safebooru 上这个 bug 很致命：`pid` 是 0 起页码、
+    // 每页 20 条、`randomPageIndexMax` 是 8000，于是 `wuthering_waves`（总量几百条）
+    // 在绝大多数取值下返回空数组（实测 `pid=5000` → `[]`）。用户看到"没搜到"，
+    // 而真相是页码被扔到了结果集第 10 万条——**这不是没图，是我们把页码扔错了地方**。
+    let offset = if is_search {
+        page.saturating_sub(1).saturating_mul(DEFAULT_LIMIT)
+    } else {
+        match source.filter.random_offset_max {
+            Some(max) => random_start_from(random_u64(), max, DEFAULT_LIMIT),
+            None => page.saturating_sub(1).saturating_mul(DEFAULT_LIMIT),
+        }
     };
 
     // 同一个病、两个药：页码分页的图源随机的是**页码**，不是偏移量。
-    // 不配的话 `{pageIndex}` 就是 `page-1`，第 1 页永远是最新那 20 张——
+    // 同样只作用于浏览。不配的话 `{pageIndex}` 就是 `page-1`，第 1 页永远是最新那 20 张——
     // 用户每次打开看到的都是同一批图，而界面上这和"缓存坏了"没法区分。
-    let page_index = match source.filter.random_page_index_max {
-        Some(max) => random_page_index_from(random_u64(), max),
-        None => page.saturating_sub(1),
+    let page_index = if is_search {
+        page.saturating_sub(1)
+    } else {
+        match source.filter.random_page_index_max {
+            Some(max) => random_page_index_from(random_u64(), max),
+            None => page.saturating_sub(1),
+        }
     };
 
     let raw = match (keyword, &source.search) {
         (Some(kw), Some(spec)) => {
-            let mapped = search::to_source_query(kw, spec.english);
+            let mut mapped = search::to_source_query(kw, spec.english);
             // booru 的标签是下划线形态，空格会被当成"两个标签同时命中"→ 0 条
-            let mapped = if spec.underscore_tags {
-                to_tag_style(&mapped)
-            } else {
-                mapped
-            };
+            if spec.underscore_tags {
+                mapped = to_tag_style(&mapped);
+            }
+            if widen {
+                mapped = widen_tag(&mapped);
+            }
             substitute_with_offset(&spec.url, page, DEFAULT_LIMIT, offset, page_index)
                 .replace("{query}", &mapped)
         }
@@ -222,16 +268,79 @@ fn build_request_url(
     reqwest::Url::parse(&raw).map_err(|e| format!("图源 {} 的请求地址不合法 {raw}: {e}", source.id))
 }
 
+/// 一次请求拿回来的东西。
+#[derive(Debug)]
+pub struct FetchPage {
+    pub images: Vec<ImageRef>,
+    /// 后端为了让结果不为空额外做了什么。`None` = 什么也没做，结果就是精确答案。
+    ///
+    /// 为什么要显式带回去：前缀扩展是**模糊**的，前端有义务说清这件事。
+    /// 悄悄放宽条件、让用户以为精确搜到了，比搜不到更糟。
+    pub notice: Option<String>,
+}
+
 /// 从指定图源拉一页图片。
 ///
 /// `query` 为空或不传 = 浏览模式；非空且图源配了 `search` = 搜索模式。
+///
+/// 搜索有两条路：先按标签精确查；**精确查为空时**，如果图源声明了
+/// `wildcardFallback`，再按前缀查一次。所以一次搜索最多两次请求。
 pub async fn fetch_source_images(
     source: &WallpaperSource,
     page: u32,
     query: Option<&str>,
-) -> Result<Vec<ImageRef>, String> {
-    let url = build_request_url(source, page, query)?;
+) -> Result<FetchPage, String> {
+    let keyword = query.map(str::trim).filter(|q| !q.is_empty());
 
+    let images = request_page(source, &build_request_url(source, page, keyword)?).await?;
+
+    let exact = FetchPage {
+        images,
+        notice: None,
+    };
+    if !exact.images.is_empty() {
+        return Ok(exact);
+    }
+
+    // 空结果才有资格放宽：
+    // - 浏览模式（没有关键词）空了就是这一页空了，不该乱猜
+    // - 图源没声明支持前缀匹配，说明它的接口不认 `*`，硬试只是白发一次请求
+    let Some(spec) = &source.search else {
+        return Ok(exact);
+    };
+    let Some(kw) = keyword else {
+        return Ok(exact);
+    };
+    if !spec.wildcard_fallback {
+        return Ok(exact);
+    }
+
+    // 扩展请求失败不改变结论：精确搜索确实是 0 条，这个答案已经可信。
+    // 把它变成报错会让用户以为"搜索坏了"，而真实情况是"这个词没有图"。
+    let widened = request_page(source, &build_url(source, page, keyword, true)?)
+        .await
+        .unwrap_or_default();
+
+    if widened.is_empty() {
+        return Ok(exact);
+    }
+
+    Ok(FetchPage {
+        images: widened,
+        notice: Some(format!(
+            "没有标签恰好叫「{kw}」，以下是按前缀扩展的结果——可能包含相近标签"
+        )),
+    })
+}
+
+/// 真的发一次请求并解析。
+///
+/// 只吃一个拼好的地址：**"请求什么"和"怎么发"分开**，
+/// 一次搜索最多打几次网络因此能在这两层之间数清楚。
+async fn request_page(
+    source: &WallpaperSource,
+    url: &reqwest::Url,
+) -> Result<Vec<ImageRef>, String> {
     // 只放行 GET；没配 method 视为默认 GET
     if let Some(m) = &source.request.method
         && !m.eq_ignore_ascii_case("GET")
@@ -240,11 +349,11 @@ pub async fn fetch_source_images(
     }
 
     // 发出去：先按系统代理，连接不通就直连再试一次
-    let resp = match build_request(client(), source, &url).send().await {
+    let resp = match build_request(client(), source, url).send().await {
         Ok(resp) => resp,
         Err(proxy_err) => {
             if crate::net::system_proxy().is_some() {
-                build_request(direct_client(), source, &url)
+                build_request(direct_client(), source, url)
                     .send()
                     .await
                     .map_err(|direct_err| {
@@ -483,6 +592,7 @@ mod tests {
             url: "https://a.com/search?q={query}&page={page}".to_string(),
             english,
             underscore_tags: false,
+            wildcard_fallback: false,
         });
         source
     }
@@ -624,7 +734,8 @@ mod tests {
 
         let images = fetch_source_images(src, 1, None)
             .await
-            .expect("请求应当成功");
+            .expect("请求应当成功")
+            .images;
         println!("拿到 {} 张", images.len());
         for img in images.iter().take(3) {
             println!(
@@ -678,7 +789,10 @@ mod tests {
         let mut firsts = std::collections::HashSet::new();
         firsts.insert(images[0].image_url.clone());
         for _ in 0..2 {
-            let again = fetch_source_images(src, 1, None).await.unwrap();
+            let again = fetch_source_images(src, 1, None)
+                .await
+                .expect("重复请求应当成功")
+                .images;
             firsts.insert(again[0].image_url.clone());
         }
         assert!(
@@ -786,7 +900,8 @@ mod tests {
 
         let images = fetch_source_images(src, 1, None)
             .await
-            .expect("请求应当成功");
+            .expect("请求应当成功")
+            .images;
         println!("拿到 {} 张", images.len());
         for img in images.iter().take(3) {
             println!(
@@ -816,7 +931,10 @@ mod tests {
         let mut firsts = std::collections::HashSet::new();
         firsts.insert(images[0].image_url.clone());
         for _ in 0..2 {
-            let again = fetch_source_images(src, 1, None).await.unwrap();
+            let again = fetch_source_images(src, 1, None)
+                .await
+                .expect("重复请求应当成功")
+                .images;
             firsts.insert(again[0].image_url.clone());
         }
         assert!(
@@ -833,11 +951,224 @@ mod tests {
         let searched = fetch_source_images(src, 1, Some("初音"))
             .await
             .expect("搜索请求应当成功");
-        println!("搜「初音」拿到 {} 张", searched.len());
+        println!("搜「初音」拿到 {} 张", searched.images.len());
         assert!(
-            !searched.is_empty(),
+            !searched.images.is_empty(),
             "中文关键词搜不到东西：初音 应该被翻成 hatsune_miku"
         );
+        // 精确命中就不该出现"按前缀扩展"的提示
+        assert!(
+            searched.notice.is_none(),
+            "精确命中不该有扩展提示：{:?}",
+            searched.notice
+        );
+    }
+
+    /// 手动跑：`cargo test -- --ignored --nocapture live_prefix_fallback`
+    ///
+    /// 这条串起"搜不到 → 补星号 → 拿到图 → 界面能看到提示"整条链。
+    ///
+    /// 用的是 2026-11-02 的实测事实：safebooru 上 `elaina` 这个标签**不存在**
+    /// （精确查返回 200 + 0 字节），`elaina_(majo_no_tabitabi)` 才是。
+    /// 伊雷娜 → 词表翻成 `elaina` → 精确 0 条 → 前缀 `elaina*` → 有图。
+    #[tokio::test]
+    #[ignore]
+    async fn live_safebooru_prefix_fallback_recovers_an_unknown_tag() {
+        let sources = crate::sources::loader::load_builtin().unwrap();
+        let src = sources
+            .sources
+            .iter()
+            .find(|s| s.id == "safebooru")
+            .expect("内置图源里应该有 safebooru");
+
+        println!(
+            "精确地址 = {}",
+            build_request_url(src, 1, Some("伊雷娜")).unwrap()
+        );
+        println!(
+            "扩展地址 = {}",
+            build_url(src, 1, Some("伊雷娜"), true).unwrap()
+        );
+
+        let page = fetch_source_images(src, 1, Some("伊雷娜"))
+            .await
+            .expect("搜索请求应当成功");
+
+        println!("拿到 {} 张，提示 = {:?}", page.images.len(), page.notice);
+        assert!(
+            !page.images.is_empty(),
+            "伊雷娜 应该通过前缀扩展拿到 elaina_(majo_no_tabitabi) 的图"
+        );
+        assert!(
+            page.notice.is_some(),
+            "扩展来的结果必须带提示，否则前端会把它当成精确命中"
+        );
+    }
+
+    /// 搜索的页码必须是**确定的**：第 1 页永远是结果集的前 20 条。
+    ///
+    /// 挡的是 2026-11-02 的实测事故：safebooru 的 `pid` 被随机到 `[0, 8000)`，
+    /// 而 `wuthering_waves` 这类标签只有几百条（每页 20 条 → 十几页），
+    /// 于是绝大多数搜索都返回 200 + `[]`。用户报的是"很多关键词都搜不到"，
+    /// 而代码里一个错都没有——页码被随机到了不存在的地方，而且**没有任何报错**。
+    #[test]
+    fn search_uses_a_deterministic_page() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "safebooru")
+            .expect("内置图源里应该有 safebooru");
+
+        // 连要 8 次，pid 必须一直是 0：一次都不许随机
+        for _ in 0..8 {
+            let url = build_request_url(source, 1, Some("初音")).unwrap();
+            let pid = url
+                .query_pairs()
+                .find(|(k, _)| k == "pid")
+                .map(|(_, v)| v.into_owned())
+                .expect("地址里应该有 pid");
+            assert_eq!(pid, "0", "搜索第 1 页的 pid 必须是 0，实际 {pid}（{url}）");
+        }
+
+        // 翻页仍然要连续：第 3 页 → pid=2
+        let page3 = build_request_url(source, 3, Some("初音")).unwrap();
+        let pid = page3
+            .query_pairs()
+            .find(|(k, _)| k == "pid")
+            .map(|(_, v)| v.into_owned())
+            .expect("地址里应该有 pid");
+        assert_eq!(pid, "2", "搜索第 3 页的 pid 应该是 2，实际 {pid}");
+    }
+
+    /// 修搜索不能把浏览的"每次换一批"一起修掉。
+    ///
+    /// 这是同一段代码里的两个相反要求，所以两条测试必须成对存在：
+    /// 只有"随机"那条，搜索会静默返回空；只有"确定"那条，浏览会永远同一批图。
+    #[test]
+    fn browse_keeps_the_random_page_index() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "safebooru")
+            .expect("内置图源里应该有 safebooru");
+
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..8 {
+            let url = build_request_url(source, 1, None).unwrap();
+            let pid = url
+                .query_pairs()
+                .find(|(k, _)| k == "pid")
+                .map(|(_, v)| v.into_owned())
+                .expect("地址里应该有 pid");
+            seen.insert(pid);
+        }
+
+        assert!(
+            seen.len() > 1,
+            "八次浏览请求拿到了同一个 pid（{seen:?}），随机页码没生效"
+        );
+    }
+
+    #[test]
+    fn widen_tag_appends_exactly_one_star() {
+        assert_eq!(widen_tag("lycoris"), "lycoris*");
+        assert_eq!(widen_tag("lycoris*"), "lycoris*", "已经带了就别补第二个");
+        assert_eq!(widen_tag(""), "", "空标签补成 * 会匹配全站");
+    }
+
+    /// 放宽后的地址里，星号必须落在 `tags` 上，而不是地址别的什么地方。
+    ///
+    /// `url` crate 可能把 `*` 编码成 `%2A`，两种写法服务端都认，
+    /// 所以这里比较的是**解码后**的值，不去断言原始字符串长什么样。
+    #[test]
+    fn widened_search_puts_the_star_on_the_tag() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "safebooru")
+            .expect("内置图源里应该有 safebooru");
+
+        let url = build_url(source, 1, Some("lycoris"), true).unwrap();
+        let tags = url
+            .query_pairs()
+            .find(|(k, _)| k == "tags")
+            .map(|(_, v)| v.into_owned())
+            .expect("地址里应该有 tags");
+
+        assert!(tags.ends_with('*'), "tags 应该以星号结尾，实际 {tags:?}");
+        assert!(
+            tags.contains("lycoris_recoil"),
+            "词表里的别名应该先翻成标签再补星号：{tags:?}"
+        );
+        assert!(
+            tags.contains("rating:general"),
+            "放宽的是关键词，不是安全过滤：{tags:?}"
+        );
+    }
+
+    /// 内置图源必须真的声明了这个能力。
+    ///
+    /// 代码写好了但配置没开，等于这个功能不存在——而用户看不到任何差别，
+    /// 只会继续报"搜不到"。
+    #[test]
+    fn safebooru_declares_the_prefix_fallback() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "safebooru")
+            .expect("内置图源里应该有 safebooru");
+
+        let search = source.search.as_ref().expect("safebooru 支持搜索");
+        assert!(
+            search.wildcard_fallback,
+            "safebooru 的标签和口语差得远（lycoris → lycoris_recoil），必须允许前缀兜底"
+        );
+    }
+
+    /// 手动跑：`cargo test -- --ignored --nocapture live_reported_keywords`
+    ///
+    /// 用户 2026-11-02 报的那几个"搜不到"的词，逐个走完整条链。
+    ///
+    /// 四个词的失败原因**不是同一个**，所以必须分开验：
+    /// - `鸣潮` / `wuwa`：标签 `wuthering_waves` 存在，之前被随机 pid 扔到空页
+    /// - `伊雷娜`：`elaina` 不存在，靠前缀兜底到 `elaina_(majo_no_tabitabi)`
+    /// - `lycoris`：词表别名 → `lycoris_recoil`
+    ///
+    /// 请求之间留 500 ms：safebooru 连续快打会返回 XML 的 `API limited due to abuse`，
+    /// 那是限流，不是功能坏了——测试要测的是功能。
+    #[tokio::test]
+    #[ignore]
+    async fn live_reported_keywords_are_searchable() {
+        let sources = crate::sources::loader::load_builtin().unwrap();
+        let src = sources
+            .sources
+            .iter()
+            .find(|s| s.id == "safebooru")
+            .expect("内置图源里应该有 safebooru");
+
+        for keyword in ["鸣潮", "wuwa", "伊雷娜", "lycoris"] {
+            let url = build_request_url(src, 1, Some(keyword)).unwrap();
+            let page = fetch_source_images(src, 1, Some(keyword))
+                .await
+                .unwrap_or_else(|e| panic!("「{keyword}」搜索失败：{e}"));
+
+            println!(
+                "「{keyword}」→ {} 张（notice={:?}）\n    精确地址 {url}",
+                page.images.len(),
+                page.notice
+            );
+
+            assert!(
+                !page.images.is_empty(),
+                "「{keyword}」搜不到图，用户会报同一个 bug：{url}"
+            );
+
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use crate::fs::{naming, paths};
-use crate::sources::dto::ImageDto;
+use crate::sources::dto::{FetchResult, ImageDto};
 use crate::sources::fetch;
 use crate::sources::loader;
 use crate::sources::model::WallpaperSource;
@@ -25,7 +25,7 @@ pub async fn fetch_images(
     source_id: String,
     page: u32,
     query: Option<String>,
-) -> Result<Vec<ImageDto>, String> {
+) -> Result<FetchResult, String> {
     let file = loader::load_builtin()?;
 
     let source = file
@@ -34,9 +34,12 @@ pub async fn fetch_images(
         .find(|s| s.id == source_id)
         .ok_or_else(|| format!("找不到图源 {source_id:?}"))?;
 
-    let refs = fetch::fetch_source_images(&source, page, query.as_deref()).await?;
+    let page = fetch::fetch_source_images(&source, page, query.as_deref()).await?;
 
-    Ok(refs.into_iter().map(ImageDto::from).collect())
+    Ok(FetchResult {
+        images: page.images.into_iter().map(ImageDto::from).collect(),
+        notice: page.notice,
+    })
 }
 
 /// 把一张远程图片设为桌面壁纸。
