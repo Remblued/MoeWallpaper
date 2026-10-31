@@ -96,6 +96,26 @@ https://github.com/Remblued/MoeWallpaper
 刷出来的数字在人工审核眼里一眼能看出来，而且会让整份材料不可信（和我们
 `docs/BENCHMARK.md` §0 的"不许编数字"是同一条规矩）。
 
+## 一个更具体的目标：1k star
+
+SignPath 没公开门槛，但**另一扇免费的门有明确数字**：Certum 的开源代码签名证书，中国区运营
+页面写的是"托管在 GitHub 上、**Star 数超过 1k** 的开源项目可免费申请"，而且它是**云 HSM**，
+签名能进 CI（不像 OV 那样要插 U 盘）。详见 `docs/SIGNING.md` §3。
+
+所以传播这件事有一个可衡量的阶段目标：**1k star**。到了那天，两条免费路都能走：
+
+1. 重新申请 SignPath Foundation（他们列的那几类信号应该也有了）；
+2. 申请 Certum 开源证书（门槛是硬的，够了就能给）。
+
+## 另一条免费的曝光+签名路：Microsoft Store
+
+个人开发者在 Microsoft Store 的**注册费已经全免**（2025-09 起，[官方公告](https://blogs.windows.com/windowsdeveloper/2025/09/10/free-developer-registration-for-individual-developers-on-microsoft-store/)），
+而且商店会用微软的证书重新签名——**从商店装的包不会有 SmartScreen 警告**。
+
+代价是要做 MSIX 打包 + 上架审核（Tauri 不直接产出 MSIX，得自己包一层）。收益不只是签名：
+商店本身是一个曝光渠道，而且"上架过商店"就是 SignPath 想看的那种外部信号。**现在不做，
+等 0.2.0 之后如果传播还起不来，这条路值得认真评估。**
+
 ## 什么时候重新申请
 
 不用等一个精确数字（他们没公开门槛）。按他们列的信号，准备到**至少满足三条**再去：

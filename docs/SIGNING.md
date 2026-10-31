@@ -51,12 +51,18 @@ Get-AuthenticodeSignature .\src-tauri\target\release\moe-wallpaper.exe
 
 | 方案 | 成本（文档给的） | 资格 | 对我们的可用性 |
 | --- | --- | --- | --- |
-| **SignPath Foundation**（开源免费签名） | **免费** | 公开的开源项目（OSI 许可，我们是 MIT）；需要仓库公开、走它的托管流水线 | ⭐ **公开后首选**：免费、给到 OV 级别签名，正好卡在我们"要转 public"的节点 |
-| **OV 证书**（DigiCert / Sectigo / GlobalSign 等） | 约 **$150–300 / 年** | 全球；需提交组织或个人身份材料；**私钥必须在硬件 token / HSM 里**（2023-06 起 CA/B 论坛强制） | 可用。要买一个 USB token，签名时插上；适合想自己掌握身份、不想依赖第三方流水线 |
+| **SignPath Foundation**（开源免费签名） | **免费** | 公开的开源项目（OSI 许可，我们是 MIT）；**还要"传播度"**（star/fork/contributor、外部文章、独立讨论、机构背书） | ⭐ 首选，但 **2026-10-31 已因传播度不足被拒**，等有信号再申请（`docs/SIGNPATH.md` §0） |
+| **Certum 开源代码签名证书**（云服务版） | **免费**（云签名，无实体卡） | 中国区运营方页面写明：**托管在 GitHub 上、Star 数超过 1k 的开源项目可免费申请**；云签名每月 5000 次上限 | ⭐ **另一扇免费的门**，而且门槛是明确的数字（1k star）。到那天再申请；云 HSM 能进 CI，比 USB token 强 |
+| **Microsoft Store（MSIX）** | **免费**（微软重签；**个人开发者注册 2025-09 起免注册费**） | 上架审核；个人身份验证（政府证件 + selfie） | 可行但工作量中高：要做 MSIX 打包 + 过审。好处是**商店里的安装没有 SmartScreen 警告**，而且商店本身就是曝光渠道 |
+| **OV 证书**（DigiCert / Sectigo / GlobalSign 等） | 约 **$150–300 / 年** | 全球；需提交组织或个人身份材料；**私钥必须在硬件 token / HSM 里**（2023-06 起 CA/B 论坛强制） | 有钱才考虑；签名要插 U 盘，进不了 CI |
 | **Azure Artifact Signing**（原 Trusted Signing） | 约 **$9.99 / 月** | **组织**：美/加/欧盟/英国；**个人**：仅美国、加拿大 | ❌ **大陆走不通**。便宜的云签名对我们这个位置不开放 |
-| **Microsoft Store（MSIX）** | 免费（商店重新签名） | 需要上架商店 | 能用但要改成 MSIX 打包 + 过审；和"NSIS 便携安装包"不是一条路，**不建议现在做** |
 | **EV 证书** | **$400+ / 年** | 全球 | ❌ 不推荐：多花的钱换不到 SmartScreen 秒过（见 §2） |
 | 自签名证书 | 免费 | — | ❌ 只能自己机器上用：别人机器会当成"不受信任"，装不上。**别发给用户** |
+
+两条免费路径的来源：
+
+- Certum 开源证书的门槛写在它的中国区运营页面（<https://certumcodesign.cn/shop/product/open-source-code-signing-cloud/>）："托管于 GITHUB.com，其 Star 数量超过 1k 的优秀开源项目可免费申请一个开源证书"，云签名每证书每月上限 5000 次。**政策会变，申请前自己去 Certum 官网确认一次。**
+- Microsoft Store 个人开发者免注册费：<https://blogs.windows.com/windowsdeveloper/2025/09/10/free-developer-registration-for-individual-developers-on-microsoft-store/>（2025-09-10）。
 
 ## 4. 真要签的时候，具体怎么做
 
@@ -162,7 +168,11 @@ Get-FileHash .\MoeWallpaper_0.1.2_x64-setup.exe -Algorithm SHA256
 - **因此现在的决定是：先攒传播度，之后再申请 Foundation。** 中间不买付费方案——
   SignPath 的付费订阅 Starter 是 **$500/年**，而且它给的证书是 GlobalSign 的 **EV**，
   **只能签发给合法注册的组织**，个人主体买不了（价目与条文见 `docs/SIGNPATH.md` §0.1）。
-- **如果哪天真的必须先有签名**：向 CA 买 **OV 证书**（约 $150–300/年 + 硬件 token），
+- **不花钱的两条备选门**（都不现在做，但都比"花钱"更适合这个项目）：
+  1. **Certum 开源证书**：门槛是明确的 **1k GitHub star**，免费、云 HSM、能进 CI；
+  2. **Microsoft Store（MSIX）**：个人开发者注册免费、商店重签、装完没有 SmartScreen 警告，
+     代价是要做 MSIX 打包 + 过审（商店本身也是曝光渠道）。
+- **如果哪天真的必须先有签名又不想等**：向 CA 买 **OV 证书**（约 $150–300/年 + 硬件 token），
   签名要插 U 盘、不能全自动，接受这个代价再买。
 - **不买 EV**：2024 年起它不再提供 SmartScreen 秒过（§2/§3）。
 - **不自签名发给用户**，那只会在别人机器上变成"不受信任"。

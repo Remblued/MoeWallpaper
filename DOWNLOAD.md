@@ -45,6 +45,20 @@ against the hash published next to *that* file.
 
 > Please do not redistribute modified builds under this name. If you build from source, say so.
 
+## If SmartScreen blocks the installer
+
+This is what an unsigned installer from an unknown publisher triggers; it is not a malware
+warning about *this* file in particular. Two ways past it, in order of honesty:
+
+1. **Check the hash first** (above). If it matches the release page, the file is the one that was
+   built and measured.
+2. Then: in the SmartScreen dialog, **More info → Run anyway**. If your antivirus quarantines it,
+   add the installer to its exclusions. If you would rather not trust the binary at all, build it
+   from source (bottom of this page) — the whole thing is MIT.
+
+Because there is no signature, nothing here asks you to trust a name. The hash and the recorded
+build are the evidence instead.
+
 ## Requirements
 
 - Windows 10 or 11, x64.
