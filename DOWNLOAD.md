@@ -43,6 +43,11 @@ recorded in [docs/BENCHMARK.md](BENCHMARK.md) §5 (machine, toolchain, exact byt
 belongs to one build: rebuilding the same tag in CI produces different bytes, so always compare
 against the hash published next to *that* file.
 
+For `v0.1.3` specifically: the release asset is 2,137,187 B with SHA-256
+`C828F5F8703016793AB74E1963A1A67D3D3CEC66FEB0D5EAA5B05A00C6C042FD`. Building the same
+tag locally yields 2,137,398 B — a different file, same source. Always compare against the
+hash for the file you actually downloaded.
+
 > Please do not redistribute modified builds under this name. If you build from source, say so.
 
 ## If SmartScreen blocks the installer

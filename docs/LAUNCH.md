@@ -14,7 +14,7 @@ discussions、institutional backing、sustained activity"。原文在 `docs/SIGN
 - [x] `docs/BENCHMARK.md`：四个数字 + 测量方法（这是我们的差异化，别人抄不走）
 - [ ] 3–5 张图：主界面（亮/暗/Acrylic 各一）、详情页、和 Electron 基线的体积对比图
 - [ ] 一段 15 秒的录屏/GIF：打开 → 点一张图 → 设为壁纸（比截图文案有说服力）
-- [ ] 第一个 tag 之后别再改 `v0.1.2` 的哈希（要改就发新版）
+- [ ] 已发布版本的哈希一个都别再改（`v0.1.2`、`v0.1.3`）；要改就发新版
 
 ## 渠道（按"读者匹配度 × 门槛"排序）
 
