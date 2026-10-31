@@ -15,8 +15,9 @@
   这种模糊说法）；图源用 JSON 声明、不做插件运行时；不内置任何图片。
 - **现在**：能联网拉图、能下载缓存、能一键换桌面壁纸；界面有图源下拉 + 缩略图网格 +
   详情页（点缩略图看大图，页面上「设为壁纸」/「下载」）+ 搜索 + 翻页 + 分辨率筛选 +
-  三种主题（玻璃主题跟随系统亮暗，亮/暗两套已截图验过）。
-- **代码量**：85 个受管文件，Rust 约 2,160 行、前端 TS 约 690 行（都含注释和测试）。
+  三种主题，其中玻璃主题是**真 Acrylic**（桌面透上来，亮/暗两套已用整屏截图验过）。
+  壁纸格式支持 JPEG / PNG / WebP / GIF（webp 先转码成 JPEG，不依赖商店扩展）。
+- **代码量**：约 90 个受管文件，Rust 约 2,440 行、前端 TS 约 690 行（都含注释和测试）。
   **你读得完。**
 
 ### 交互铁律（已经定死，别自己改）
@@ -46,34 +47,37 @@
 | 出参转换 | `ImageRef → ImageDto`，缩略图回退 | `src-tauri/src/sources/dto.rs` |
 | 下载缓存 | 命中就不联网，原子写入 | `src-tauri/src/wallpaper/download.rs` |
 | 设壁纸 | Win32 `SystemParametersInfoW` 手工 FFI | `src-tauri/src/wallpaper/set.rs` |
-| 当前壁纸 | 复制到固定的 `current.jpg`，与缓存解耦 | `src-tauri/src/wallpaper/current.rs` |
+| 当前壁纸 | 规整成 JPEG 后写到固定的 `current.jpg`，与缓存解耦 | `src-tauri/src/wallpaper/current.rs` |
+| **格式兼容** | webp / PNG / GIF → JPEG（`image` crate，只开 4 个解码器）。已修掉"current.jpg 里装着 webp/PNG"的债 | `src-tauri/src/wallpaper/normalize.rs` |
+| **窗口背景材质** | 真 Acrylic：`transparent: true` + `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)`，跟随系统亮暗 | `src-tauri/src/backdrop.rs` + `src/styles.css` |
 | 四个命令 | `list_sources` / `fetch_images` / `set_wallpaper` / `save_image` | `src-tauri/src/commands/mod.rs` |
 | 真实图源 | 360 / safebooru / wallhaven / nekos.best / lolicon，全部免费、无需 API key | `sources/builtin/sources.json` |
 | 内容提示 | `contentNote`：图源名旁标出"尺度较大"（目前只有 lolicon）。**是提示，不是过滤器** | `sources/builtin/sources.json` + `src/main.ts::syncSourceUi` |
 | 关键词搜索 | 每个图源可声明自己的搜索地址；中文走本地词表翻成英文标签 | `src-tauri/src/sources/search.rs` + `search/terms.json` |
 | 前端 | 图源下拉、缩略图网格、四态、toast | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
+| **CI** | GitHub Actions：Rust（fmt/clippy/test）+ 前端（tsc/vite），见 §2.5 | `.github/workflows/ci.yml` |
 
-**测试：96 个（91 个自动跑，5 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）。`cargo clippy -D warnings` 零告警。**
+**测试：102 个（96 个自动跑，6 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）。`cargo clippy -D warnings` 零告警。**
 
 ### 未做（这就是接下来的活）
 
-- ✅ 玻璃主题（v0.1.1 起；**v0.1.2 改成跟随系统亮/暗**，靠 `prefers-color-scheme`
-  两套变量，是窗口内 `backdrop-filter`，不是真 Mica/Acrylic）
-- ❌ 真 Mica/Acrylic：要 `transparent: true` + `DwmSetWindowAttribute`（桌面能透上来，
-  才是 TranslucentTB 那种观感）。改动会动到窗口层，且只能在真窗口上看效果
+- ✅ 玻璃主题（v0.1.1 起跟随系统亮/暗）；**v0.1.2 末升级成真 Acrylic**：
+  `transparent: true` + `DwmSetWindowAttribute(38)`，桌面/后窗真的透上来并被模糊
 - ✅ 国内图源：360 壁纸（v0.1.1）；2026-10-31 又接上 safebooru，并把 lolicon 的图片域名钉到
   `i.pixiv.re`。**5 个图源实测 4 个能直连**，只有 wallhaven 不行。依据在 `docs/SOURCES-CN.md` §9–§10
 - ✅ 五个图源都能"换一批"：360 用 `randomOffsetMax`、safebooru 用 `randomPageIndexMax`，
   其余三个接口本身就是随机的。**接新图源必须先回答"第 1 页是不是永远同一批"**——
   见 `docs/SOURCES-CN.md` §0.1 第 1 条
+- ✅ webp：**产品决定"不为了体积砍体验"**，加了 `image` 解码器并把 `current.jpg` 统一转成
+  JPEG（安装包 +0.23 MB，已实测）。夜轻图源仍不接，卡在"纯文本行 + 无缩略图"
 - ❌ 定时切换
-- ❌ 没有 CI
 - ⚠️ Electron 基线已经全部测完（安装包 115.57 MB / 安装后 356.77 MB / 冷启动
-  104.5 ms / 空闲 133.5 MB 私有）。MoeWallpaper `v0.1.2` 的四个数已在其 release
-  构建上重测并**修过一次 360 缩略图**（最新一组：1.81 MB / 5.39 MB / 41 ms /
-  **218.3 MB 无图、293.7 MB 有图**）。**空闲内存这一项我们仍然是输的，而且要看跟哪个
-  状态比**：和空白窗口对齐只能拿"无图"那格（218.3 对 133.5，多 84.8 MB）；有图那格
-  不能拿去和空白窗口比。别在外面只说"内存 293.7 MB"。详见 `docs/BENCHMARK.md` §5
+  104.5 ms / 空闲 133.5 MB 私有）。MoeWallpaper `v0.1.2` 的最新一组：
+  **2.04 MB / 5.99 MB / 39.5 ms / 231.0 MB 无图、307.7 MB 有图**。**空闲内存这一项我们
+  仍然是输的，而且要看跟哪个状态比**：和空白窗口对齐只能拿"无图"那格（231.0 对 133.5，
+  多 97.5 MB）；有图那格不能拿去和空白窗口比。别在外面只说"内存 307.7 MB"。
+  内存一律报**中位 + 区间**，摆幅不再追查（换设备差异更大）。
+  详见 `docs/BENCHMARK.md` §5
 
 ---
 
@@ -111,6 +115,33 @@ npx tsc --noEmit
 | `cargo *` | `src-tauri\` | cargo 靠 `Cargo.toml` 找项目，只往上级找 |
 | `npm *` / `npx *` | 仓库根 | 靠 `package.json` |
 | `git *` | 哪都行 | 靠 `.git`，会往上找 |
+
+### 2.5 CI（`.github/workflows/ci.yml`）
+
+**CI 是什么**：仓库里放一个 YAML，GitHub 每次 push / PR 就开一台干净的虚拟机，把你写在
+里面的命令跑一遍。红了就在 PR 上标出来——**它替你做的是"别人不用先本地配环境就能相信这
+个提交能过"**，不是"帮你测体积"。
+
+两个 job，各跑各的：
+
+| job | 跑什么 | 为什么放 `windows-latest` |
+|---|---|---|
+| `rust` | `cargo fmt --check` / `cargo clippy --all-targets -- -D warnings` / `cargo test` | 代码里有 `user32` / `dwmapi` / `advapi32` 的 FFI 和 `#[cfg(windows)]`，Linux 上编不过 |
+| `web` | `npm ci` / `npx tsc --noEmit` / `npx vite build` | 纯前端，放 `ubuntu-latest` 更便宜也更快 |
+
+几个有意为之的决定：
+
+- **CI 里不 `tauri build`。** release 构建带 LTO + `codegen-units = 1`，一次几分钟，
+  而且装出来的包在 CI 里没人用。**体积/冷启动/内存必须真机测**（`docs/BENCHMARK.md` §1
+  要求固定机器、固定防护状态），CI 只保证"编得过、测试过、lint 干净、类型对"。
+- **`npm ci` 而不是 `npm install`**：锁文件说什么装什么，CI 里不允许悄悄升级依赖。
+- **`concurrency` 会取消同一分支的上一个 run**：连续 push 时省额度。
+- `#[ignore]` 的 6 个测试（联网 / 改桌面 / 转码）**CI 不跑**，它们本来就是手动门。
+- 私有仓库的 Actions 有免费额度（Windows runner 按 2 倍计费），这个工作流一次大约
+  3–5 分钟；跑太频繁时先看额度。
+
+**本地等价命令**就是上面那四条（fmt / clippy / test / tsc）；`npx vite build` 是打包
+前那次构建，顺手也跑一下。
 
 ---
 
@@ -310,7 +341,7 @@ interface ImageDto {
 | **A5** | `save_image`：存到用户的图片目录 | ✅ |
 | **A6** | 接真实图源：wallhaven / nekos.best / lolicon | ✅ |
 | **A7** | 搜索后端：`search` 配置 + `search/terms.json` 中文词表 | ✅ |
-| **A8** | 窗口半透明（改 `tauri.conf.json`，见 B8） | ⬜ |
+| **A8** | 真·窗口背景材质（`transparent` + `DwmSetWindowAttribute`，见 B8） | ✅ `src-tauri/src/backdrop.rs` |
 | ~~A9~~ | ~~定时切换~~ | **砍掉**，不作为卖点 |
 
 ### B 的任务
@@ -324,7 +355,7 @@ interface ImageDto {
 | B5 | 点击 → 调 `set_wallpaper` | ✅ **已被 B6 取代**：点击现在打开详情页，不再直接换桌面 |
 | **B6** | **图片详情页** | ✅ `5790aad` |
 | **B7** | 主题色 | ⬜ |
-| **B8** | 半透明 | ⬜ |
+| **B8** | 半透明：先 CSS 后真 Acrylic | ✅ 真 Acrylic 已上窗，亮/暗都截图验过 |
 | **B9** | 搜索框 | ✅ `5790aad` |
 
 **B6 / B9 的合并记录（2026-10-30，`1a89bfb`）**
@@ -397,8 +428,8 @@ export async function fetchImages(
 
 | 债 | 位置 | 什么时候还 |
 |---|---|---|
-| **缓存会记住错误**：下载到一张 HTML 错误页，也会被永久当成"这张图"，不会自愈 | `wallpaper/download.rs` | 加「清空缓存」按钮；临时解法：删掉 `%LOCALAPPDATA%\com.remblued.moewallpaper` |
-| `current.jpg` 里可能装着 PNG 数据，靠 Windows 按内容识别格式 | `wallpaper/current.rs` | 如果哪天换壁纸失效，**优先怀疑这里** |
+| **缓存会记住错误**：下载到一张 HTML 错误页，也会被永久当成"这张图"，不会自愈（**现在至少会报错**：`normalize` 认出"不是能识别的图片"，不会把错误页设成壁纸） | `wallpaper/download.rs` | 加「清空缓存」按钮；临时解法：删掉 `%LOCALAPPDATA%\com.remblued.moewallpaper` |
+| ~~`current.jpg` 里可能装着 PNG / WebP 数据，靠 Windows 按内容识别格式~~ | `wallpaper/current.rs` + `normalize.rs` | **已还**：落盘前统一转成 JPEG（已是 JPEG 的原样透传），解不出来就报错。见 `docs/SOURCES-CN.md` §7.3 |
 | 安全参数靠"记得配"——图源没写 `sfwQuery` 就没有任何内容限制，而这一点只有 code review 能保证 | `sources/builtin/sources.json` | 做用户自定义图源时，在加载阶段强制校验：要么配 `sfwQuery`，要么显式标记"API 本身只提供安全内容" |
 | 中文词表只收了约 150 个高频词，长尾词翻不了（`search/terms.json`） | `search/terms.json` | 持续加词；搜不到时 UI 已提示改用英文 |
 | 英文译名对不上目标站标签就会搜不到（映射正确 ≠ 标签存在） | `search/terms.json` | 加词时**实测一次**：拿翻出来的英文去 wallhaven 搜，看条数是不是 0 |
@@ -406,7 +437,11 @@ export async function fetchImages(
 | 360 壁纸有动漫分类（`cid=26`），但**不是公开 API**，条款不明，而且 `start` 是偏移量不是页码 | — | 已在 v0.1.1 接入并排第一；条款与风险见 `docs/SOURCES-CN.md` §5 |
 | nekos.best 和 lolicon 不提供缩略图，网格会直接加载原图（一张 2–9MB） | `sources/builtin/sources.json` | 要么限制每页数量，要么后端生成缩略图。**safebooru 有 `preview_url`（7.5 KB），说明这不是"没法做"，是那几个接口不给** |
 | ~~**360 的 `url_thumb` 也是原图**：实测 1920×1080 / 2560×1440，不是缩略图~~ | `sources/builtin/sources.json`（360 的 `thumbnailUrl`） | **已还**：改成接口真正按尺寸产出的 `img_1280_800`（`docs/SOURCES-CN.md` §2 有整组字段的实测表）。有图空闲内存 465.8 → 293.7 MB。两条测试盯着它：不联网的挡字段名，`#[ignore]` 的联网量字节数 |
-| **空闲内存的私有值不能当单一定值**：同一构建、同一界面，无图状态 5 次采样 211.0–245.9 MB；有图状态在修 360 缩略图之前是 187.0–580.5 MB，之后收窄到 274.5–297.8 MB | 测量口径，不是代码 | 对外报中位数 + 区间，并带上界面状态。剩下的 20% 摆幅集中在 `gpu-process` 私有（115–137 MB），原因仍未查明，见 `docs/BENCHMARK.md` §5 末尾待办 |
+| **空闲内存的私有值不能当单一定值**：同一构建、同一界面，无图 215.1–238.8 MB、有图 299.3–313.2 MB（修 360 缩略图之前有图曾到 187.0–580.5 MB） | 测量口径，不是代码 | **产品决定：不再追这个摆幅**。对外一律报中位数 + 区间，并带上界面状态；换设备差异只会更大。见 `docs/BENCHMARK.md` §5 |
+| **webp 每次"设为壁纸"都重新解码 + 重编码**，转换结果不缓存（同一张图设两次要算两遍） | `wallpaper/current.rs::publish_to` | 图片大时几百毫秒。要优化就在缓存目录里存一份 `<hash>.wallpaper.jpg`，命中就直接用 |
+| **安装包为 webp 多花 0.23 MB**（`image` crate 的 4 个解码器，exe +0.62 MB） | `src-tauri/Cargo.toml` | 这是有意的交换，不是待还的债；要缩体积只能砍解码器（比如去掉 gif），那会重新变成"某些图设不了壁纸" |
+| **Acrylic 在 Windows 10 上的降级没在真机验证过**：`DWMWA_SYSTEMBACKDROP_TYPE` 在 Win10 会失败，代码只保证不崩 + CSS 半透明兜底 | `src-tauri/src/backdrop.rs` | 有 Win10 机器时跑一次 `measure-backdrop.ps1`，确认"无模糊但可读" |
+| **`transparent: true` 让进程里多一个 15×15 的辅助顶层窗口**，`Process.MainWindowHandle` 可能指向它 | 测量脚本 / 任何自动化 | 脚本一律用 `bench/measure/lib-window.ps1` 按"标题 + 面积"挑窗口，别信 `MainWindowHandle` |
 | ~~`{page}` 只能填页码，不支持偏移量分页~~ | `sources/fetch.rs` | **已还**：`{offset}`（`(page-1)*limit`）和 `{pageIndex}`（`page-1`，Gelbooru 的 `pid`）都在 |
 | **`ResponseMapping.tags` 是死配置**：字段存在、`schema.ts` 里有、360 配置里写了 `"tags": "utag"`，但 `ImageRef` 没有 `tags` 字段、`extract_images` 从不读它、前端也没有任何地方显示——**一个没被消费的承诺** | `sources/model.rs`、`sources/builtin/sources.json`、`src/lib/sources/schema.ts` | 二选一：删干净，或把它接进 `ImageRef → ImageDto → UI`。别让它继续挂着 |
 | `sfwQuery` 是静态追加，无法与 `{query}` 合并；booru 类接口要求所有条件在同一个 `tags` 参数里，两个 `tags` 会让 PHP 取最后一个、搜索词静默丢失 | `sources/fetch.rs::apply_sfw_query` | safebooru 的绕法是把分级写进 URL 模板；根治要改格式（安全条件与搜索词合并） |

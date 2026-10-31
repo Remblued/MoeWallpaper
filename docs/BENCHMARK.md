@@ -611,6 +611,82 @@ cargo test -- --ignored --nocapture live_360_source_works_end_to_end
   `msedgewebview2.exe` 属于 Windows 搜索宿主。§2.4 的脚本用命令行筛选
   （`*moewallpaper*`）是安全的，但按 `ParentProcessId` 从 app 递归更硬，且能顺带拿到
   每个进程的角色（browser / renderer / gpu-process / utility / crashpad）。
+- **`MainWindowHandle` 在开了 `transparent: true` 之后不可信。** 进程里多了一个
+  15×15 的辅助顶层窗口，`MainWindowHandle` 有时就指它（实测拿到过 158×26 和 15×15），
+  于是"窗口出现"的时刻和截图区域都是错的。改成按 **可见 + 标题含 MoeWallpaper +
+  面积最大** 自己挑（`bench/measure/lib-window.ps1`）。
+- **PowerShell 默认 DPI 不感知，截图会整体偏移。** `GetWindowRect` 返回逻辑像素、
+  `CopyFromScreen` 用物理像素，150% 缩放下差 110 px 左右——截出来窗口跑到右下角、
+  左上角露出别的程序。脚本开头必须 `SetProcessDPIAware()`（同样在 lib-window.ps1）。
+- **`PrintWindow` 截不到 DWM 的 Acrylic。** 它只渲染窗口自己画的东西，系统材质不在里面，
+  截出来是一块透明，必然误判成"没生效"。验证 Acrylic 必须抄屏幕：窗口
+  `SetWindowPos(HWND_TOPMOST)` 置顶（不需要焦点）→ `CopyFromScreen` 整屏。
+- **带中文注释的 `.ps1` 必须存成 UTF-8 带 BOM。** PowerShell 5.1 会按 GBK 读，
+  多字节字符可能把换行吃掉，把下一行代码并进注释里，报一个完全看不懂的
+  `Unexpected token '}'`。这批脚本踩过一次（和 `push-retry.ps1` 是同一个坑）。
+
+### webp 转码 + 真 Acrylic 之后 · 2026-10-31（README 现在用的是这一组）
+
+这一版加了两样东西，两样都会影响数字，所以四格全部重测：
+
+- **webp/PNG → JPEG 转码**（`wallpaper/normalize.rs`，`image` crate 的四个解码器）
+- **真·窗口背景材质**：`transparent: true` + `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)`
+
+```text
+日期        2026-10-31（13:00–13:40）
+commit      这一节对应数据是 webp + Acrylic 之后的构建
+机器/电源   同上（i7-14650HX / 31.6 GB / Win11 26200 / 平衡档 / Kaspersky 运行中）
+WebView2    156.0.4314.50（与上一节相同）
+安装包      MoeWallpaper_0.1.2_x64-setup.exe
+            2,135,537 B = 2.04 MB
+            sha256 2440651A5929BE0CF13C819F743A18C885D5193487303C27E46E02886F44FB9A
+安装后      6,278,550 B = 5.99 MB（exe 6,199,296 + uninstall 79,254）
+冷启动      39.5 ms（10 发中位，首发 96 ms；极差 36–96）
+空闲内存    有图 307.7 MB 私有（3 发，299.3–313.2）
+            无图 231.0 MB 私有（3 发，215.1–238.8）
+```
+
+**和上一版（只改了 360 缩略图）逐项对照：**
+
+```text
+                        上一版            这一版            差
+安装包                  1,902,282 B       2,135,537 B       +233,255 B
+安装后                  5,656,982 B       6,278,550 B       +621,568 B
+exe                     5,577,728 B       6,199,296 B       +621,568 B
+冷启动(中位)            41 ms             39.5 ms           噪声范围
+空闲内存 有图(私有)      293.7 MB          307.7 MB          +14.0 MB
+         无图(私有)      218.3 MB          231.0 MB          +12.7 MB
+有图私有值极差           274.5–297.8       299.3–313.2       —
+app 进程私有             5.8 MB            11.9 MB           +6.1 MB
+```
+
+**体积为什么涨了 0.23 MB（exe 涨 0.62 MB）：** 全在 `image` crate 的四个解码器
+（jpeg / png / webp / gif）。NSIS 压缩把它从 621,568 B 压到 233,255 B。
+**这是有意的交换**：产品决定是"宁可安装包变大，也不让设为壁纸在别人机器上失效"
+（`docs/SOURCES-CN.md` §7.3）。安装包 2.04 MB 仍然比 Electron 基线小 57 倍。
+
+**内存为什么涨了约 14 MB：** 两个进程各涨一块——`app` 从 5.8 涨到 11.9 MB（解码器
+的代码页 + 一次性栈），`gpu-process` 从 172–196 涨到 194–207 MB（Acrylic 由 DWM
+合成，GPU 侧多一层）。**没有逐进程归因，只记录事实**；两项里哪一项占大头没查。
+
+**冷启动 39.5 ms 与上一版 41 ms 没有实质差别**，两批的极差都覆盖这个差
+（36–96 / 24–54）。首发 96 ms 照例单列：那是刚装完的第一发。
+
+**webp 转码的实际耗时**（不在这四个数里，但用户按按钮时感觉得到）：
+夜轻 `pc/1.webp`（374,722 B，2560×1446）→ JPEG（533,306 B）。解码 + 编码在普通
+机器上是几百毫秒量级，**没做精确计时**；界面上按「设为壁纸」时本来就有「设置中…」
+的禁用态，够盖住它。
+
+**Acrylic 的目视验证**（不是数字，但同一版构建必须一起看）：
+
+```text
+bench\measure\measure-backdrop.ps1 -Theme light / -Theme dark
+→ 截图里窗口后面的浏览器内容**透过窗口可见且被模糊**，亮/暗两套都成立；
+  标题栏跟随系统亮暗（DWMWA_USE_IMMERSIVE_DARK_MODE），窗口圆角仍然保留。
+```
+
+Windows 10 没有 `DWMWA_SYSTEMBACKDROP_TYPE`（38），调用会失败——**这条降级路径没有
+在真实 Win10 上测过**，只保证失败时不崩、CSS 半透明兜底（alpha 0.32–0.55）。
 
 ### 待办
 
@@ -623,9 +699,13 @@ cargo test -- --ignored --nocapture live_360_source_works_end_to_end
 - [x] 查清"内存大头是图片还是外壳"：图片，证据是 360 的 `url_thumb` 返回原图
 - [x] 修掉它（`thumbnailUrl` → `img_1280_800`）并复测：有图 465.8 → 293.7 MB
 - [x] 目视验证玻璃主题的亮/暗两套（`bench/measure/measure-theme.ps1`）
-- [ ] 查清 `gpu-process` 私有内存仍然有 82–480 MB 的抖动（有图那格在修复后已收窄到
-      274–298 MB，但无图那格 198–246 MB 还有 20% 的摆幅）。**这决定内存那一格能不能
-      当单一数字对外说**
+- [x] webp/PNG → JPEG 转码（`wallpaper/normalize.rs`），安装包代价已实测（+0.23 MB）
+- [x] 真 Acrylic（`transparent` + `DwmSetWindowAttribute`）并用整屏截图验证（`measure-backdrop.ps1`）
+- [x] **内存摆幅不再追查**：产品决定是"如实报中位数 + 区间"。同一台机器上还有
+      211–246 MB 的摆幅，不同设备之间的差异只会更大——把它写成上限/下限比追出一个
+      "官方数字"有用。这一条不再挂待办。
+- [ ] **Win10 上的 Acrylic 降级没在真机上测过**：`DWMWA_SYSTEMBACKDROP_TYPE` 在 Win10
+      会失败，代码只保证"不崩 + CSS 半透明兜底"。等到有条件在 Win10 跑一次再补记录
 - [ ] 换一天复测一次，确认数字可复现
 - [ ] （可选）查清"在项目目录树内启动即崩"的机制——不影响数字，但很想知道
 

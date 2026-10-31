@@ -16,8 +16,9 @@ app whose main job is "show a grid of images and set one as the wallpaper".
 MoeWallpaper makes one bet — a wallpaper app does not need a full browser runtime
 bundled per app — and three commitments to go with it:
 
-1. **Small install.** Measured at **1.81 MB**, not estimated. See
-   [Size, measured not claimed](#size-measured-not-claimed).
+1. **Small install.** Measured at **2.04 MB**, not estimated. See
+   [Size, measured not claimed](#size-measured-not-claimed). (0.23 MB of that is the
+   webp/PNG decoders — see below for why that trade was made on purpose.)
 2. **Sources are data, not code.** Adding an image source means editing a JSON file.
    There is no plugin runtime, no scripting layer, no per-source native module.
 3. **No bundled images.** This repository contains no wallpaper files. Sources point
@@ -66,47 +67,52 @@ measured, there is no `TBD` left**. The method lives in [docs/BENCHMARK.md](docs
 
 | Metric | MoeWallpaper `v0.1.2` | Minimal Electron app | How it is measured |
 | --- | --- | --- | --- |
-| Installer size (`.exe`) | **1.81 MB** | **115.57 MB** | file size of the installer produced by the build |
-| Installed size on disk | **5.39 MB** | **356.77 MB** | sum of all files under the install directory |
-| Cold start to visible window | **41 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
-| Idle memory (60 s after launch) | **218.3 MB** (private, empty grid)<br>**293.7 MB** (private, 20 images loaded) | **133.5 MB** (private, blank window) | whole process tree, not just the main process; both window states measured |
+| Installer size (`.exe`) | **2.04 MB** | **115.57 MB** | file size of the installer produced by the build |
+| Installed size on disk | **5.99 MB** | **356.77 MB** | sum of all files under the install directory |
+| Cold start to visible window | **39.5 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
+| Idle memory (60 s after launch) | **231.0 MB** (private, empty grid)<br>**307.7 MB** (private, 20 images loaded) | **133.5 MB** (private, blank window) | whole process tree, not just the main process; both window states measured |
 
-The installer is **about 64× smaller** (115.57 MB versus 1.81 MB), the installed
-footprint is **about 66× smaller**, and cold start is **about 2.5× faster**.
+The installer is **about 57× smaller** (115.57 MB versus 2.04 MB), the installed
+footprint is **about 60× smaller**, and cold start is **about 2.6× faster**.
 
 Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
 Intel i7-14650HX / 31.6 GB / Windows 11 build 26200 / release build
-(LTO + strip) / `v0.1.2` plus the 360-thumbnail fix.
+(LTO + strip) / `v0.1.2` (360-thumbnail fix, webp transcode, real Acrylic).
 
-**Three caveats that belong with these numbers:**
+**Four caveats that belong with these numbers:**
 
 - **The installer does not include the WebView2 runtime.** Windows 11 ships it;
   Windows 10 downloads roughly 100 MB on first install. So this is not
-  "1.81 MB everywhere".
+  "2.04 MB everywhere".
+- **The extra 0.23 MB is spent on purpose.** The jump from 1.81 to 2.04 MB is all
+  webp/PNG decoders: without them `SystemParametersInfoW` cannot read webp, and
+  "set as wallpaper" fails silently on machines without the Store webp extension.
+  We chose a slightly bigger installer over a button that lies, so `current.jpg`
+  is now always a real JPEG.
 - **Cold start is *window appears*, not *page rendered*.** The latter is a few
   hundred milliseconds later. The very first launch after installing measured
-  204 ms (AV scan + cold file read); the steady median is 41 ms.
+  96 ms (AV scan + cold file read); the steady median is 39.5 ms.
 - **Idle memory is meaningless without the window state.** Decoded images land in
-  private memory: the same exe sits at 218.3 MB with an empty grid (median of 5,
-  211.0–245.9) and 293.7 MB once the default source's 20 images are on screen
-  (median of 3, 274.5–297.8). Reporting a single number would merge two different
+  private memory: the same exe sits at 231.0 MB with an empty grid (median of 3,
+  215.1–238.8) and 307.7 MB once the default source's 20 images are on screen
+  (median of 3, 299.3–313.2). Reporting a single number would merge two different
   scenarios.
 
-Idle memory is reported as **private**, not working set (379.9 MB empty, 403.1 MB
+Idle memory is reported as **private**, not working set (384.2 MB empty, 405.5 MB
 loaded) — summing working sets double-counts DLL pages shared between the app and
 WebView2 processes.
 
 **This is the metric we lose, but the comparison has to match.** The Electron
 baseline is **a blank window that loads no images**, so the only row it can be
-compared with is our *empty grid*: **218.3 MB against 133.5 MB, 84.8 MB more
-(1.63×)**. The gap shows up in the process count: we run 7 processes, Electron 4,
-and our idle GPU process alone holds 115–137 MB private. **The loaded 293.7 MB must
+compared with is our *empty grid*: **231.0 MB against 133.5 MB, 97.5 MB more
+(1.73×)**. The gap shows up in the process count: we run 7 processes, Electron 4,
+and our idle GPU process alone holds 115–137 MB private. **The loaded 307.7 MB must
 not be compared with the blank 133.5 MB** — that would be "20 wallpapers" against
 "nothing on screen". An Electron app showing the same 20 images would grow too;
 this minimal baseline simply cannot measure that side.
 
 That 356.77 MB is not padding either: a single file, `BaselineElectron.exe`, is
-238.23 MB — 44× the entire installed footprint of this project (5.39 MB).
+238.23 MB — 40× the entire installed footprint of this project (5.99 MB).
 
 **What the images cost is now measured, and it has already been cut once.** The
 default source (360) originally mapped `thumbnailUrl` to `url_thumb`, which turned
@@ -114,9 +120,15 @@ out to return the 2560×1440 original rather than a thumbnail, so the 20-card gr
 decoded 20 full-resolution wallpapers: 465.8 MB loaded, 267 MB more than the empty
 grid ([SOURCES-CN §2](docs/SOURCES-CN.md)). Mapping it to `img_1280_800`, the size
 variant the API actually produces, took the loaded figure from **465.8 MB to
-293.7 MB (−172 MB)** and narrowed the spread from 187–580 MB to 274–298 MB. The
-remaining ~75 MB is the cost of "20 1280×800 images"; going lower would mean fewer
+293.7 MB (−172 MB)** and narrowed the spread from 187–580 MB to 274–298 MB. With
+webp support and Acrylic on top, the current figures are 307.7 MB vs 231.0 MB —
+about 77 MB for the 20 1280×800 images themselves. Going lower would mean fewer
 cards or server-side scaling — **not done, not measured**.
+
+**The memory spread is not chased any further.** The same machine and the same
+build still range over 215–314 MB, and other devices will differ more. So the
+numbers are always reported as **median plus range**, never as a precise-looking
+single figure. See [BENCHMARK](docs/BENCHMARK.md) §5.
 
 **The 233 MB recorded for `a65d7ed` is retired**: that run measured a
 wallhaven-thumbnail window, which is not the state this version ships with, and
@@ -132,7 +144,7 @@ Two rules keep this honest:
 - If a measurement contradicts a claim, **the claim changes**. The numbers are the
   product; the marketing line is not.
 
-## Features (v0.1.0)
+## Features (v0.1.2)
 
 | Feature | Status |
 | --- | --- |
@@ -142,12 +154,14 @@ Two rules keep this honest:
 | Keyword search (Chinese tag dictionary, per-source search endpoints) | ✅ |
 | Pagination | ✅ |
 | Resolution filter (≥1080p / ≥1440p / ≥4K) | ✅ |
-| Dark / light / glass themes, remembered; **glass follows the system light/dark setting** | ✅ |
+| Dark / light / glass themes, remembered; **glass is real system Acrylic — the desktop shows through** | ✅ |
 | One-click wallpaper (Win32 `SystemParametersInfo`) | ✅ |
+| **JPEG / PNG / WebP / GIF wallpapers** (webp is transcoded to JPEG, no Store extension needed) | ✅ |
 | Save to Pictures without overwriting | ✅ |
 | Local cache (thumbnails, current wallpaper) | ✅ |
 | Declarative JSON sources | ✅ |
 | Domestic (CN) sources | ✅ 360 Wallpaper (the default source) |
+| CI (fmt / clippy / test / tsc / vite on GitHub Actions) | ✅ |
 | Scheduled rotation | ❌ deliberately cut, see below |
 
 ### Not in v0.1.0
