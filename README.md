@@ -33,9 +33,9 @@ Measured on 2026-10-31 (Windows 11, direct Wi-Fi, system proxy off, no TUN tunne
 | Source | Direct | Note |
 |---|---|---|
 | 360 Wallpaper · anime | ✅ | Listed first, so it is what you see on launch |
-| Safebooru | ✅ | Anime illustrations; `width:>=1920` is filtered server-side, thumbnails included |
-| nekos.best | ✅ | Reports no dimensions, so the resolution filter does not apply |
-| Lolicon · Pixiv | ✅ | Images go through the `i.pixiv.re` mirror (upstream `i.pximg.net` does not connect) |
+| Safebooru | ✅ | Anime illustrations; `width:>=1920` is filtered server-side, thumbnails included, tag search supported |
+| nekos.best | ✅ | neko category only; **no keyword search** (its search is fuzzy ranking and returns unrelated images) |
+| Lolicon · Pixiv | ✅ | Images go through the `i.pixiv.re` mirror (upstream `i.pximg.net` does not connect); **labelled "尺度较大" in the UI** |
 | Wallhaven | ❌ connection timeout | The only one that needs a proxy |
 
 **"Reachable" is a property of the exit network and the moment, not of the site.** On the

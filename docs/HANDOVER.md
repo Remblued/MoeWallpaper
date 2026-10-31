@@ -45,10 +45,11 @@
 | 当前壁纸 | 复制到固定的 `current.jpg`，与缓存解耦 | `src-tauri/src/wallpaper/current.rs` |
 | 四个命令 | `list_sources` / `fetch_images` / `set_wallpaper` / `save_image` | `src-tauri/src/commands/mod.rs` |
 | 真实图源 | 360 / safebooru / wallhaven / nekos.best / lolicon，全部免费、无需 API key | `sources/builtin/sources.json` |
+| 内容提示 | `contentNote`：图源名旁标出"尺度较大"（目前只有 lolicon）。**是提示，不是过滤器** | `sources/builtin/sources.json` + `src/main.ts::syncSourceUi` |
 | 关键词搜索 | 每个图源可声明自己的搜索地址；中文走本地词表翻成英文标签 | `src-tauri/src/sources/search.rs` + `search/terms.json` |
 | 前端 | 图源下拉、缩略图网格、四态、toast | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
 
-**测试：93 个（88 个自动跑，5 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）。`cargo clippy -D warnings` 零告警。**
+**测试：95 个（90 个自动跑，5 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）。`cargo clippy -D warnings` 零告警。**
 
 ### 未做（这就是接下来的活）
 
@@ -187,13 +188,19 @@ invoke("fetch_images", { sourceId, page: 1, query: "风景" })      // 搜索
    查不到就**原样发出去**，不猜、不拆词、不音译
 3. **编码**：交给 `Url::parse`，中文关键词自动百分号编码
 
-三个内置图源的**实测**行为（不是查文档）：
+图源的**实测**搜索行为（不是查文档）：
 
-| 图源 | 参数 | 中文 | 英文 | 日文 |
-|---|---|---|---|---|
-| wallhaven | `q` | ❌ 返回 0 条（所以要翻译） | ✅ | ✅ |
-| lolicon | `keyword` | ✅ 直接用（不翻译） | ✅ | ✅ |
-| nekos.best | `query` + `type=1` | ❌ 400 报错（所以要翻译） | ✅ | ❌ |
+| 图源 | 参数 | 中文 | 英文 | 日文 | 备注 |
+|---|---|---|---|---|---|
+| wallhaven | `q` | ❌ 返回 0 条（所以要翻译） | ✅ | ✅ | |
+| lolicon | `keyword` | ✅ 直接用（不翻译） | ✅ | ✅ | |
+| safebooru | `tags=` | ✅ 翻成英文再转下划线 | ✅ | ❌ | `underscoreTags: true`，`hatsune miku` 0 条 / `hatsune_miku` 20 条 |
+| 360 | 无 | — | — | — | 接口没有搜索 |
+| nekos.best | 无 | — | — | — | **搜索已摘除**，见 `docs/SOURCES-CN.md` §9.5 |
+
+nekos.best 为什么没有：它的 `/search` 是相关性排序、永不为空
+（`zzzznotexist` 也返回 5 张），图片结果只有画师名可比对。
+再配下去就是"配了但静默不准"，所以按 `model.rs` 的规矩直接不配。
 
 **所以前端的提示语很关键**：搜不到结果时不要写"没有结果"，要写
 **"试试英文关键词，或换个图源"**——因为很可能只是这个词没被词表覆盖。
@@ -232,7 +239,7 @@ interface ImageDto {
 | 图源 | 安全来自哪 |
 |---|---|
 | wallhaven | `sfwQuery: "purity=100"` |
-| lolicon | `sfwQuery: "r18=0"` + 图片域名钉在 `i.pixiv.re` |
+| lolicon | `sfwQuery: "r18=0"` + 图片域名钉在 `i.pixiv.re` + `contentNote: "尺度较大"`（**提示，不是保护**） |
 | nekos.best | API 本身只提供安全内容，不配 |
 | 360 | 只有分类没有分级，固定 `cid=26 动漫卡通`——**这是本项目的短板，不是保护** |
 | safebooru | 分级写进了 URL 的 `tags=rating:general`，**没有走 `sfwQuery`** |
@@ -431,6 +438,7 @@ export async function fetchImages(
 | 搜一个不存在的词 → 显示"没有结果"而不是报错 | **这是对的**，别当 bug 修。safebooru 空结果返回 200 + 0 字节 body，`fetch.rs::parse_body` 把空正文当空列表 | — |
 | **新接的图源每次打开、每次切回都是同一批图** | 该接口的第 1 页是确定性的（`pid=0`、`start=0`），而配置里没配随机 | 配 `randomPageIndexMax`（页码分页）或 `randomOffsetMax`（偏移量分页）。注意随机上限别超过服务端允许的深度（safebooru 是 8000 页）。**别先怀疑缓存**：缩略图缓存按 URL 哈希存，换源不可能命中同一批 URL——先看接口是不是确定性的 |
 | **某个图源中英文都搜不到** | 搜索词不是目标站认的形态。booru 的标签是 `hatsune_miku`（下划线、多词 AND），`hatsune miku` 实测 0 条；中文还需先过词表 | 该图源配 `search.underscoreTags: true`；另外**搜索模板别带尺寸过滤**（`width:>=1920` 会把冷门标签吃成 0 条），尺寸交给界面上的分辨率档位 |
+| **搜索结果明显不相关 / 搜什么都有一堆图** | 该接口的搜索是**相关性排序而不是精确匹配**（nekos.best 就是这样：`zzzznotexist` 也返回 5 张） | 先搜一个保证不存在的词验证。若它不返回空集，正确做法是**摘掉 `search` 块**让界面禁用，而不是加后置过滤——过滤后搜番名会几乎全空，比现在更像坏了。见 `docs/SOURCES-CN.md` §9.5 |
 | 翻到很深的页 → 报错里写着 `API limited due to abuse` | safebooru 对异常 `pid` 返回 **XML** 而不是 JSON | 正常使用（连发 6 次）不会触发；错误信息现在会带上正文开头，能直接认出来 |
 | 界面点了没反应 | 前端运行时异常，不是 Rust 崩了 | 窗口里 `F12` 看 Console 第一行红字 |
 | 打包好的 exe 双击不弹窗、也不出界面；PowerShell 启动则几十毫秒就退出，退出码 `-2147483645`，事件日志和 WER 都干净 | **不是你的代码**。装了第三方杀软（本机是 Kaspersky 21.26，`KLIF`/`klflt` 内核驱动 hook 进程创建），未签名的构建会被它拦掉。先看 `root/SecurityCenter2` 和运行中的过滤驱动 | 把项目目录加进杀软排除项，或临时暂停防护。测量时两个基线要在同一防护状态下跑 |
