@@ -174,6 +174,42 @@ upload --clobber` 附到同名 Release。**不自动触发**，只在 Actions �
 签名那一步用 `if: vars.SIGNPATH_PROJECT_SLUG != ''` 挡着：没配变量就只构建、只附件，不会
 因为缺 token 而红。申请与接入清单见 `docs/SIGNPATH.md`。
 
+**第一次真实运行（2026-10-31，release run #1）**：全绿。步骤顺序与设计一致，签名那一步
+`skipped`（没配变量），`Attach to release` 也按参数跳过。产物：
+
+```text
+unsigned-installer artifact  2,115,812 B   （安装包 ZIP）
+installer artifact           2,116,077 B   （安装包 + .sha256）
+解开的安装包                 2,134,310 B   sha256 CBF2ADFE488AC11E3B228FD9A8910FE02AD24403A6E2DF9F2574175AA3268ADA
+```
+
+**⚠️ CI 构建的安装包和本地构建的不是同一串字节。** 本地那一版是 2,135,537 B /
+`2440651A…`（发布页和 BENCHMARK 记的就是它），CI 这一版是 2,134,310 B / `CBF2ADFE…`。
+差异来自 rustc / NSIS 版本与时间戳，不是代码不同。**结论：哈希必须跟着"哪一次构建"走**，
+换构建环境就要重新记录；签名会再改一次字节，所以签名发布之后三处哈希（README、
+BENCHMARK、Release 说明）都要更新。
+
+### 2.7 main 的保护（规则集，不是经典分支保护）
+
+2026-10-31 起 `main` 上有一条名为 `main-protection` 的**规则集**：
+
+| 规则 | 效果 |
+| --- | --- |
+| `deletion` | 不能删 `main` |
+| `non_fast_forward` | **不能 force-push**（真正要防的那件事） |
+| `required_status_checks` | PR 合并前必须过 CI 的两个 check（`Rust (fmt / clippy / test)`、`Frontend (tsc / vite build)`），不要求分支最新 |
+| `bypass_actors` | 维护者（`Remblued`，actor id 174602037）可直推 |
+
+**为什么不用经典分支保护**（踩过一次）：经典保护里勾了 "Require status checks" 之后，
+**连直接 push 也会被拒**——报 `GH006: Protected branch update failed` /
+"2 of 2 required status checks are expected"，因为新提交还没有任何 check run；而
+`enforce_admins = true` 又让 owner 绕不过去。对单人项目来说那等于"每次改文档都要开 PR"。
+规则集支持 `bypass_actors`：规则对别人照样生效，维护者能直推。
+
+改设置的逻辑（可复现）：建规则集 → 删掉经典保护。**别只建不删**：两套同时存在时，经典保护
+仍然会拦 push。规则集的 API 是 `POST /repos/{owner}/{repo}/rulesets`，经典保护是
+`DELETE /repos/{owner}/{repo}/branches/main/protection`。
+
 ---
 
 ## 3. 代码地图
