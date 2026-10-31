@@ -28,6 +28,7 @@
 | `measure-memory.ps1` | 空闲内存：整棵树 + 每个进程的角色，60 秒静置 | 有图 7 次采样（465.8 MB 中位） |
 | `measure-offline.ps1` | 同一套内存口径，但把 `HTTP(S)_PROXY` 指向 `127.0.0.1:1` 挡住取图 | 无图 3 次采样（198.6 MB 中位） |
 | `measure-foreground.ps1` | 单次采样 + `PrintWindow` 截图，用来固定"界面当时是什么状态"的证据 | 错误态/有图态的窗口截图 |
+| `measure-theme.ps1` | 临时改 `AppsUseLightTheme`，各截一张亮/暗的窗口图，结束后还原 | 玻璃主题两套配色的目视验证 |
 | `measure-all.ps1` | 最早用的合并版（冷启动 + 内存 + 截图一条龙），第一批数据出自它 | 冷启动第 1 批、内存采样 1–3 |
 
 ## 跑法
@@ -48,13 +49,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File bench\measure\measure-memory
 
 powershell -NoProfile -ExecutionPolicy Bypass -File bench\measure\measure-offline.ps1 `
     -ExePath 'D:\bench\install\moe-wallpaper.exe' -Samples 2 -IdleSeconds 60
+
+# 4) 亮/暗各截一张（会临时改系统"应用主题"，结束时还原）
+powershell -NoProfile -ExecutionPolicy Bypass -File bench\measure\measure-theme.ps1 `
+    -ExePath 'D:\bench\install\moe-wallpaper.exe' -Theme light -OutDir D:\bench\out
+powershell -NoProfile -ExecutionPolicy Bypass -File bench\measure\measure-theme.ps1 `
+    -ExePath 'D:\bench\install\moe-wallpaper.exe' -Theme dark  -OutDir D:\bench\out
 ```
+
+`measure-theme.ps1` 改的是 `HKCU\...\Themes\Personalize\AppsUseLightTheme`，玻璃主题
+靠 `prefers-color-scheme` 跟随它。**它只影响视觉，不影响时序/内存数字**，所以别在跑
+冷启动或内存测量的同时用它。
 
 ## 两个必须记住的读数规则
 
-1. **内存数字必须带界面状态。** 同一构建：无图 198.6 MB / 有图 465.8 MB（私有）。
-   仓库里默认图源是 360，它的 `url_thumb` 实测返回的就是 1920×1080 / 2560×1440 的
-   原图（不是缩略图），所以"有图"那格等于 20 张全尺寸壁纸解码后的样子。
-2. **私有内存不是稳定量。** 7 次采样私有 187.0–580.5 MB，工作集 413.7–532.8 MB，
-   抖动集中在 `gpu-process`。报中位数时要写区间；想知道能不能只报一个数，先看
-   `docs/BENCHMARK.md` §5 末尾那条待办。
+1. **内存数字必须带界面状态。** 同一构建：无图 218.3 MB / 有图 293.7 MB（私有）。
+   仓库里默认图源是 360；它的 `thumbnailUrl` 现在映射到 `img_1280_800`（真缩略图）。
+   改之前映射的是 `url_thumb`，那个字段实测返回原图，同样两个状态是 198.6 / 465.8——
+   差值 267 MB 对 75 MB，就是这一行配置的差别。
+2. **私有内存不是稳定量。** 修完缩略图后，有图那格收窄到 274.5–297.8 MB，但无图那格
+   还有 211.0–245.9 MB 的摆幅，抖动集中在 `gpu-process`。报中位数时要写区间；想知道
+   能不能只报一个数，先看 `docs/BENCHMARK.md` §5 末尾那条待办。

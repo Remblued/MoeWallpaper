@@ -16,7 +16,7 @@ app whose main job is "show a grid of images and set one as the wallpaper".
 MoeWallpaper makes one bet — a wallpaper app does not need a full browser runtime
 bundled per app — and three commitments to go with it:
 
-1. **Small install.** Measured at **1.82 MB**, not estimated. See
+1. **Small install.** Measured at **1.81 MB**, not estimated. See
    [Size, measured not claimed](#size-measured-not-claimed).
 2. **Sources are data, not code.** Adding an image source means editing a JSON file.
    There is no plugin runtime, no scripting layer, no per-source native module.
@@ -66,56 +66,57 @@ measured, there is no `TBD` left**. The method lives in [docs/BENCHMARK.md](docs
 
 | Metric | MoeWallpaper `v0.1.2` | Minimal Electron app | How it is measured |
 | --- | --- | --- | --- |
-| Installer size (`.exe`) | **1.82 MB** | **115.57 MB** | file size of the installer produced by the build |
+| Installer size (`.exe`) | **1.81 MB** | **115.57 MB** | file size of the installer produced by the build |
 | Installed size on disk | **5.39 MB** | **356.77 MB** | sum of all files under the install directory |
-| Cold start to visible window | **31 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
-| Idle memory (60 s after launch) | **198.6 MB** (private, empty grid)<br>**465.8 MB** (private, 20 images loaded) | **133.5 MB** (private, blank window) | whole process tree, not just the main process; both window states measured |
+| Cold start to visible window | **41 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
+| Idle memory (60 s after launch) | **218.3 MB** (private, empty grid)<br>**293.7 MB** (private, 20 images loaded) | **133.5 MB** (private, blank window) | whole process tree, not just the main process; both window states measured |
 
-The installer is **about 64× smaller** (115.57 MB versus 1.82 MB), the installed
-footprint is **about 66× smaller**, and cold start is **about 3.4× faster**.
+The installer is **about 64× smaller** (115.57 MB versus 1.81 MB), the installed
+footprint is **about 66× smaller**, and cold start is **about 2.5× faster**.
 
 Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
 Intel i7-14650HX / 31.6 GB / Windows 11 build 26200 / release build
-(LTO + strip) / commit `24f4cbc` (`v0.1.2`).
+(LTO + strip) / `v0.1.2` plus the 360-thumbnail fix.
 
 **Three caveats that belong with these numbers:**
 
 - **The installer does not include the WebView2 runtime.** Windows 11 ships it;
   Windows 10 downloads roughly 100 MB on first install. So this is not
-  "1.82 MB everywhere".
+  "1.81 MB everywhere".
 - **Cold start is *window appears*, not *page rendered*.** The latter is a few
   hundred milliseconds later. The very first launch after installing measured
-  203 ms (AV scan + cold file read); the steady median is 31 ms.
+  204 ms (AV scan + cold file read); the steady median is 41 ms.
 - **Idle memory is meaningless without the window state.** Decoded images land in
-  private memory: the same exe sits at 198.6 MB with an empty grid and 465.8 MB
-  once the default source's 20 images are on screen (median of 7 runs, range
-  187.0–580.5 MB). Reporting a single number would merge two different scenarios.
+  private memory: the same exe sits at 218.3 MB with an empty grid (median of 5,
+  211.0–245.9) and 293.7 MB once the default source's 20 images are on screen
+  (median of 3, 274.5–297.8). Reporting a single number would merge two different
+  scenarios.
 
-Idle memory is reported as **private**, not working set (371.6 MB empty, 450.9 MB
+Idle memory is reported as **private**, not working set (379.9 MB empty, 403.1 MB
 loaded) — summing working sets double-counts DLL pages shared between the app and
 WebView2 processes.
 
 **This is the metric we lose, but the comparison has to match.** The Electron
 baseline is **a blank window that loads no images**, so the only row it can be
-compared with is our *empty grid*: **198.6 MB against 133.5 MB, 65.1 MB more
-(1.49×)**. The gap shows up in the process count: we run 7 processes, Electron 4,
-and our idle GPU process alone holds 102 MB private. **The loaded 465.8 MB must
-not be compared with the blank 133.5 MB** — that would be "20 1080p wallpapers"
-against "nothing on screen". An Electron app showing the same 20 images would
-grow too; this minimal baseline simply cannot measure that side.
+compared with is our *empty grid*: **218.3 MB against 133.5 MB, 84.8 MB more
+(1.63×)**. The gap shows up in the process count: we run 7 processes, Electron 4,
+and our idle GPU process alone holds 115–137 MB private. **The loaded 293.7 MB must
+not be compared with the blank 133.5 MB** — that would be "20 wallpapers" against
+"nothing on screen". An Electron app showing the same 20 images would grow too;
+this minimal baseline simply cannot measure that side.
 
 That 356.77 MB is not padding either: a single file, `BaselineElectron.exe`, is
 238.23 MB — 44× the entire installed footprint of this project (5.39 MB).
 
-**Where the memory can actually go is now on record: 198.6 MB with no images,
-465.8 MB with 20 of them — a difference of about 267 MB that comes from the images
-themselves.** The default source (360) returns full-size wallpapers in its
-`url_thumb` field — measured at 1920×1080 and 2560×1440, not thumbnails (see
-[BENCHMARK §5](docs/BENCHMARK.md)) — so the grid decodes 20 full-resolution
-wallpapers. The direction is therefore "stop decoding full-size images in the
-grid" (smaller thumbnails, or fewer cards). **That is a direction, not an
-implementation: nothing has been changed or measured on it.** The per-process
-shell cost of a few tens of MB is not something the frontend can move.
+**What the images cost is now measured, and it has already been cut once.** The
+default source (360) originally mapped `thumbnailUrl` to `url_thumb`, which turned
+out to return the 2560×1440 original rather than a thumbnail, so the 20-card grid
+decoded 20 full-resolution wallpapers: 465.8 MB loaded, 267 MB more than the empty
+grid ([SOURCES-CN §2](docs/SOURCES-CN.md)). Mapping it to `img_1280_800`, the size
+variant the API actually produces, took the loaded figure from **465.8 MB to
+293.7 MB (−172 MB)** and narrowed the spread from 187–580 MB to 274–298 MB. The
+remaining ~75 MB is the cost of "20 1280×800 images"; going lower would mean fewer
+cards or server-side scaling — **not done, not measured**.
 
 **The 233 MB recorded for `a65d7ed` is retired**: that run measured a
 wallhaven-thumbnail window, which is not the state this version ships with, and
