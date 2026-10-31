@@ -67,7 +67,7 @@ fn build_request(
     req
 }
 
-/// 把配置里写的 `{page}` / `{limit}` 换成真实数字。
+/// 把配置里写的 `{page}` / `{limit}` / `{offset}` / `{pageIndex}` 换成真实数字。
 ///
 /// 配置是静态 JSON，不能在 JSON 里做运算，所以占位符由代码替换。
 /// 不做这一步，请求会带着字面量 `{page}` 发出去，服务器直接 400。
@@ -83,8 +83,15 @@ pub fn substitute_placeholders(url: &str, page: u32, limit: u32) -> String {
 ///
 /// 分开的理由：顺序固定的图源要的是**随机**偏移量（见 `SourceFilter::random_offset_max`），
 /// 而随机值不能藏在"替换函数"里——那样这个函数就没法测了。
+///
+/// 为什么除了 `{page}` 还要有 `{pageIndex}`：有整类图源（Gelbooru 的 `dapi`，
+/// safebooru 走的就是它）的翻页参数 `pid` 是**从 0 开始的页码**，不是"第几页"，
+/// 也不是字节偏移。实测 `pid=0/1/2` 对应连续的三段结果，每段挪动 `limit` 条——
+/// 也就是说 `pid = page - 1`。少了这个占位符，配置里只能写 `pid={page}`，
+/// 结果是第 1 页就跳到第二批，永远看不见开头那 20 张。
 fn substitute_with_offset(url: &str, page: u32, limit: u32, offset: u32) -> String {
     url.replace("{page}", &page.to_string())
+        .replace("{pageIndex}", &page.saturating_sub(1).to_string())
         .replace("{limit}", &limit.to_string())
         .replace("{offset}", &offset.to_string())
 }
@@ -223,11 +230,21 @@ pub async fn fetch_source_images(
         return Err(format!("请求 {} 返回 {} — {}", url, status, snippet.trim()));
     }
 
-    // 读 JSON
-    let value = resp
-        .json::<serde_json::Value>()
+    // 先读成文本再解析，而不是直接 `resp.json()`。两个理由，都是实测踩出来的：
+    //
+    // 1. 有的接口"查到没有结果"时返回 200 + **0 字节 body**（safebooru 就是这样）。
+    //    直接 parse 会报 `EOF while parsing a value`，用户看到的是报错，
+    //    而真相是"这个词没有图"。空 body 在这里等价于空列表。
+    // 2. 有的接口出错时返回 XML 而不是 JSON（safebooru 的 `API limited due to abuse`）。
+    //    把正文开头塞进错误信息，一眼能看出是服务端拒绝，不是我们的配置写错。
+    let body = resp
+        .text()
         .await
-        .map_err(|e| format!("解析 {} 的 JSON 失败: {}", url, e))?;
+        .map_err(|e| format!("读取 {} 的响应失败: {}", url, e))?;
+
+    let Some(value) = parse_body(url.as_str(), &body)? else {
+        return Ok(Vec::new());
+    };
 
     // 提取
     let mut images = crate::sources::extract::extract_images(&source.response, &value)
@@ -242,6 +259,30 @@ pub async fn fetch_source_images(
     }
 
     Ok(images)
+}
+
+/// 把响应正文解析成 JSON。
+///
+/// 返回 `Ok(None)` 表示"正文是空的"——这不是错误，是接口在说"这个查询没有结果"。
+/// 调用方把它当空列表处理，用户才会看到"没有结果"而不是一句解析报错。
+///
+/// 为什么单独抽成函数：这段逻辑决定了"空白"和"坏数据"两种情况的区别，
+/// 而那正是最容易写错、也最值得测的地方。抽出来就能不联网地测。
+fn parse_body(url: &str, body: &str) -> Result<Option<serde_json::Value>, String> {
+    if body.trim().is_empty() {
+        return Ok(None);
+    }
+
+    serde_json::from_str(body).map(Some).map_err(|e| {
+        let snippet: String = body.chars().take(160).collect();
+        let snippet = snippet.replace(['\r', '\n'], " ");
+        format!(
+            "解析 {} 的 JSON 失败: {} — 响应开头: {}",
+            url,
+            e,
+            snippet.trim()
+        )
+    })
 }
 
 /// 把 `http://` 开头的地址升级成 `https://`。
@@ -527,6 +568,86 @@ mod tests {
         );
     }
 
+    /// lolicon 必须把图片主机**钉在镜像上**。
+    ///
+    /// 它返回的原图域名默认已经是 `i.pixiv.re`，但那是上游的默认值，改一次我们就完了：
+    /// 实测 `i.pximg.net` 在这台机器上是**连接超时**（带不带 Referer 都 20 秒死），
+    /// 而 `i.pixiv.re` 4/4 成功。所以要在配置里写死，不能赌默认值。
+    ///
+    /// 这条测试不联网，它只是挡住"有人顺手把这个参数删掉"。
+    #[test]
+    fn lolicon_pins_the_reachable_image_mirror() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "lolicon")
+            .expect("内置图源里应该有 lolicon");
+
+        let browse = build_request_url(source, 1, None).unwrap();
+        assert!(
+            browse.as_str().contains("proxy=i.pixiv.re"),
+            "浏览地址没钉镜像，图片会指向被墙的 i.pximg.net：{browse}"
+        );
+
+        let searched = build_request_url(source, 1, Some("猫")).unwrap();
+        assert!(
+            searched.as_str().contains("proxy=i.pixiv.re"),
+            "搜索地址没钉镜像：{searched}"
+        );
+    }
+
+    /// 手动跑：`cargo test -- --ignored --nocapture live_safebooru`
+    ///
+    /// 一次覆盖四件事：`{pageIndex}` 的 0 起页码、`tags` 里 `rating:general` 和
+    /// `width:>=1920` 有没有被正确编码、响应是不是**根数组**（`itemsPath` 缺省）、
+    /// 缩略图和宽高有没有取到。
+    #[tokio::test]
+    #[ignore]
+    async fn live_safebooru_source_works_end_to_end() {
+        let sources = crate::sources::loader::load_builtin().unwrap();
+        let src = sources
+            .sources
+            .iter()
+            .find(|s| s.id == "safebooru")
+            .expect("内置图源里应该有 safebooru");
+
+        println!("请求地址 = {}", build_request_url(src, 1, None).unwrap());
+
+        let images = fetch_source_images(src, 1, None)
+            .await
+            .expect("请求应当成功");
+        println!("拿到 {} 张", images.len());
+        for img in images.iter().take(3) {
+            println!(
+                "  {}x{:?} thumb={}",
+                img.width.unwrap_or(0),
+                img.height,
+                img.thumbnail_url.is_some()
+            );
+        }
+
+        assert!(!images.is_empty(), "safebooru 应该返回图片");
+        assert!(
+            images.iter().all(|i| i.image_url.starts_with("https://")),
+            "图片地址必须是 https"
+        );
+        assert!(
+            images.iter().all(|i| i.thumbnail_url.is_some()),
+            "缩略图必须取到，否则一页要拉几十 MB 原图"
+        );
+        assert!(
+            images.iter().all(|i| i.width.is_some_and(|w| w >= 1920)),
+            "width:>=1920 应该由服务端过滤生效"
+        );
+
+        let page2 = fetch_source_images(src, 2, None).await.unwrap();
+        assert_ne!(
+            images[0].image_url, page2[0].image_url,
+            "{{pageIndex}} 没生效：第 2 页和第 1 页的首图一样"
+        );
+    }
+
     #[test]
     fn offset_starts_at_zero_and_steps_by_limit() {
         let u = "https://a.com/p?start={offset}&count={limit}";
@@ -539,6 +660,51 @@ mod tests {
         // page=0 是非法的，但也不能因为 u32 下溢而崩
         let url = substitute_placeholders("https://a.com/p?start={offset}", 0, 20);
         assert!(url.contains("start=0"), "{url}");
+    }
+
+    /// Gelbooru 系的 `pid` 是 0 起的页码：第 1 页要 0，第 3 页要 2。
+    /// 写成 `pid={page}` 的话第 1 页就跳过开头那 20 张，而且**不会报错**。
+    #[test]
+    fn page_index_is_zero_based() {
+        let u = "https://a.com/api?pid={pageIndex}&limit={limit}";
+        assert!(substitute_placeholders(u, 1, 20).contains("pid=0"));
+        assert!(substitute_placeholders(u, 3, 20).contains("pid=2"));
+    }
+
+    #[test]
+    fn page_index_never_underflows() {
+        let url = substitute_placeholders("https://a.com/api?pid={pageIndex}", 0, 20);
+        assert!(url.contains("pid=0"), "{url}");
+    }
+
+    /// 空正文 = 没有结果，不是解析失败。
+    ///
+    /// safebooru 搜不到东西时就是 200 + 0 字节。要是这里返回 Err，
+    /// 用户搜一个不存在的番名会看到"解析 JSON 失败"，而不是"没有结果"。
+    #[test]
+    fn empty_body_means_no_results() {
+        assert!(parse_body("https://a.com", "").unwrap().is_none());
+        assert!(parse_body("https://a.com", "  \r\n\t ").unwrap().is_none());
+    }
+
+    #[test]
+    fn valid_json_body_is_parsed() {
+        assert_eq!(
+            parse_body("https://a.com", "[]").unwrap(),
+            Some(serde_json::json!([]))
+        );
+    }
+
+    /// 服务端返回 XML 拒绝时，错误信息里必须有正文开头，
+    /// 否则用户看到的是一个无法归因的 "expected value"。
+    #[test]
+    fn non_json_body_is_reported_with_its_opening() {
+        let xml = "<?xml version=\"1.0\"?><response success=\"false\" reason=\"API limited due to abuse\"/>";
+
+        let message = parse_body("https://a.com/x", xml).unwrap_err();
+
+        assert!(message.contains("https://a.com/x"), "要带地址：{message}");
+        assert!(message.contains("API limited"), "要带正文开头：{message}");
     }
 
     #[test]

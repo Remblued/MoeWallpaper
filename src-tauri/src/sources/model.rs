@@ -12,7 +12,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpRequestSpec {
-    /// 请求地址。`{limit}` 和 `{page}` 是占位符，由代码替换，JSON 本身不做替换。
+    /// 请求地址。占位符由代码替换，JSON 本身不做替换：
+    ///
+    /// - `{page}` / `{limit}`：页码和每页数量
+    /// - `{pageIndex}`：`page - 1`，给"页码从 0 开始"的接口用（Gelbooru 的 `pid`）
+    /// - `{offset}`：`(page - 1) * limit`，给偏移量分页的接口用（360 壁纸的 `start`）
     pub url: String,
     pub method: Option<String>,
     #[serde(default)]

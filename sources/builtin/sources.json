@@ -26,6 +26,29 @@
       }
     },
     {
+      "id": "safebooru",
+      "name": "Safebooru · 动漫插画",
+      "enabled": true,
+      "homepage": "https://safebooru.org/",
+      "request": {
+        "url": "https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit={limit}&pid={pageIndex}&tags=rating:general+width:>=1920",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "imageUrl": "file_url",
+        "thumbnailUrl": "preview_url",
+        "width": "width",
+        "height": "height"
+      },
+      "search": {
+        "url": "https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit={limit}&pid={pageIndex}&tags=rating:general+width:>=1920+{query}",
+        "english": true
+      }
+    },
+    {
       "id": "wallhaven",
       "name": "Wallhaven · 动漫",
       "enabled": true,
@@ -81,7 +104,7 @@
       "enabled": true,
       "homepage": "https://api.lolicon.app/",
       "request": {
-        "url": "https://api.lolicon.app/setu/v2?num={limit}&p={page}",
+        "url": "https://api.lolicon.app/setu/v2?num={limit}&p={page}&proxy=i.pixiv.re",
         "method": "GET",
         "headers": {
           "Accept": "application/json"
@@ -97,7 +120,7 @@
         "sfwQuery": "r18=0"
       },
       "search": {
-        "url": "https://api.lolicon.app/setu/v2?num={limit}&keyword={query}&p={page}",
+        "url": "https://api.lolicon.app/setu/v2?num={limit}&keyword={query}&p={page}&proxy=i.pixiv.re",
         "english": false
       }
     }
