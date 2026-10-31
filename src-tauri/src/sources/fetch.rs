@@ -139,6 +139,16 @@ fn random_u64() -> u64 {
     hasher.finish()
 }
 
+/// 把关键词里的空白换成下划线。
+///
+/// booru（safebooru / Gelbooru / Danbooru）的标签是 `hatsune_miku` 这种形态，
+/// 词与词之间是 **AND**。`hatsune miku` 会被当成两个标签同时命中，实测 0 条；
+/// `hatsune_miku` 20 条。用 `split_whitespace` 而不是 `replace(' ', "_")`，
+/// 是为了把连续空白和制表符一起收掉。
+fn to_tag_style(keyword: &str) -> String {
+    keyword.split_whitespace().collect::<Vec<_>>().join("_")
+}
+
 /// 把图源声明的安全参数拼到地址末尾。
 ///
 /// 配置里 `sfwQuery` 写的是 `purity=100` 这样的裸参数，不带问号。
@@ -195,6 +205,12 @@ fn build_request_url(
     let raw = match (keyword, &source.search) {
         (Some(kw), Some(spec)) => {
             let mapped = search::to_source_query(kw, spec.english);
+            // booru 的标签是下划线形态，空格会被当成"两个标签同时命中"→ 0 条
+            let mapped = if spec.underscore_tags {
+                to_tag_style(&mapped)
+            } else {
+                mapped
+            };
             substitute_with_offset(&spec.url, page, DEFAULT_LIMIT, offset, page_index)
                 .replace("{query}", &mapped)
         }
@@ -465,8 +481,56 @@ mod tests {
         source.search = Some(SearchSpec {
             url: "https://a.com/search?q={query}&page={page}".to_string(),
             english,
+            underscore_tags: false,
         });
         source
+    }
+
+    /// 下划线转换本身：连续空白也要收掉，不能出现 `a__b`。
+    #[test]
+    fn tag_style_replaces_whitespace_with_underscores() {
+        assert_eq!(to_tag_style("hatsune miku"), "hatsune_miku");
+        assert_eq!(to_tag_style("  starry   sky "), "starry_sky");
+        assert_eq!(to_tag_style("landscape"), "landscape");
+        assert_eq!(to_tag_style(""), "");
+    }
+
+    /// safebooru 的搜索必须走"翻译 → 下划线"这条链。
+    ///
+    /// 这条挡的是真实事故：中文搜不到，因为 `初音 → "hatsune miku"` 直接进了
+    /// `tags` 参数，而 booru 把空格当 AND 分隔，`hatsune` 和 `miku` 两个标签
+    /// 同时命中的结果实测是 0 条。要的是 `hatsune_miku`。
+    #[test]
+    fn safebooru_search_turns_a_chinese_phrase_into_a_booru_tag() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "safebooru")
+            .expect("内置图源里应该有 safebooru");
+
+        assert!(
+            source.search.as_ref().is_some_and(|s| s.underscore_tags),
+            "safebooru 的 search 必须开 underscoreTags，否则中文多词一律 0 条"
+        );
+
+        let url = build_request_url(source, 1, Some("初音")).unwrap();
+        let tags = url
+            .query_pairs()
+            .find(|(k, _)| k == "tags")
+            .map(|(_, v)| v.into_owned())
+            .expect("地址里应该有 tags");
+
+        assert!(
+            tags.contains("hatsune_miku"),
+            "中文「初音」应该变成 hatsune_miku，实际 tags = {tags}"
+        );
+        assert!(
+            !tags.contains("hatsune miku"),
+            "带空格的形态在 booru 上是 0 条：{tags}"
+        );
+        // 搜索不该再套"必须 >=1920 宽"的服务端条件，否则冷门标签永远搜不到
+        assert!(!tags.contains("width:"), "搜索模板不该带尺寸过滤：{tags}");
     }
 
     #[test]
@@ -677,6 +741,21 @@ mod tests {
         assert!(
             firsts.len() > 1,
             "三次请求拿到同一张图，随机页码没生效：{firsts:?}"
+        );
+
+        // 搜索：中文关键词必须能出图。这条把"词表 → 下划线 → 服务端标签"整条链串起来，
+        // 任何一环断了都是"这个图源不能搜索"这个用户可见的结论。
+        println!(
+            "搜索词 初音 -> {}",
+            build_request_url(src, 1, Some("初音")).unwrap()
+        );
+        let searched = fetch_source_images(src, 1, Some("初音"))
+            .await
+            .expect("搜索请求应当成功");
+        println!("搜「初音」拿到 {} 张", searched.len());
+        assert!(
+            !searched.is_empty(),
+            "中文关键词搜不到东西：初音 应该被翻成 hatsune_miku"
         );
     }
 

@@ -122,6 +122,17 @@ pub struct SearchSpec {
     /// - `false`：原样传（lolicon 走 pixiv 标签，中文直接可用）
     #[serde(default)]
     pub english: bool,
+    /// 关键词里的空白要不要换成下划线。
+    ///
+    /// **booru 类站点必须开这个**：它们的标签是 `hatsune_miku` 这种下划线形态，
+    /// 多个词之间是 **AND**。发 `hatsune miku` 会被理解成"同时有 `hatsune` 和 `miku`
+    /// 两个标签"，实测 safebooru 返回 0 条；而 `hatsune_miku` 返回 20 条。
+    ///
+    /// 为什么一定要转：`search/terms.json` 里有 43/149 条译名带空格
+    /// （初音 → `hatsune miku`、原神 → `genshin impact`）。
+    /// 不转的话，中文搜索**逢多词必 0 条**，表现是"这个图源不能搜索"。
+    #[serde(default)]
+    pub underscore_tags: bool,
 }
 
 /// 单个图源。

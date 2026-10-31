@@ -110,6 +110,15 @@ export interface SearchSpec {
    * - `false`：lolicon 走 pixiv 标签，中文直接可用
    */
   english?: boolean;
+  /**
+   * 关键词里的空白要不要换成下划线。
+   *
+   * **booru 类站点必须开**：标签是 `hatsune_miku` 形态、词间是 AND，
+   * 发 `hatsune miku` 会被当成两个标签同时命中（实测 0 条），
+   * 而词表里有 43/149 条译名带空格（初音 → `hatsune miku`）。
+   * 不开这个，中文搜索逢多词必 0 条。
+   */
+  underscoreTags?: boolean;
 }
 
 /** 单个图源。 */
