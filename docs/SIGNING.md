@@ -157,8 +157,9 @@ Get-FileHash .\MoeWallpaper_0.1.2_x64-setup.exe -Algorithm SHA256
 
 - **`v0.1.2` 不签。** 当时仓库还是 private，签名只会在每次打包时多要一次 PIN，收益为零。
 - **仓库已于 2026-10-31 转 public**，所以 **SignPath Foundation 的资格条件现在满足了**
-  （公开仓库 + OSI 许可 + 有 CI）。下一步就是去申请；拿到之后把它的签名步骤接进
-  `signCommand`（§4.5），只改一段配置。
+  （公开仓库 + OSI 许可 + 有 CI）。申请材料、前置条件和批准后的接入清单写在
+  `docs/SIGNPATH.md`；签名那一步已经预置在 `.github/workflows/release.yml` 里，
+  变量一配就生效。
 - **公开分发的第一个版本必须签。** 首选 SignPath；如果它不收（名额/资格问题），再买
   **OV 证书 + token**。
 - **不买 EV**，理由见 §2/§3：2024 年起它不再提供 SmartScreen 秒过。

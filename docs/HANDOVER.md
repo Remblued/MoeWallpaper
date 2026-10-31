@@ -150,8 +150,8 @@ npx tsc --noEmit
 - **`npm ci` 而不是 `npm install`**：锁文件说什么装什么，CI 里不允许悄悄升级依赖。
 - **`concurrency` 会取消同一分支的上一个 run**：连续 push 时省额度。
 - `#[ignore]` 的 6 个测试（联网 / 改桌面 / 转码）**CI 不跑**，它们本来就是手动门。
-- 私有仓库的 Actions 有免费额度（Windows runner 按 2 倍计费），这个工作流一次大约
-  3–5 分钟；跑太频繁时先看额度。
+- 仓库转 public 之后 Actions 对标准 runner **免费**（之前 private 时 Windows runner 按 2 倍
+  计费）。工作流本身一次 3–5 分钟。
 
 **本地等价命令**就是上面那四条（fmt / clippy / test / tsc）；`npx vite build` 是打包
 前那次构建，顺手也跑一下。
@@ -159,6 +159,20 @@ npx tsc --noEmit
 **第一次真实运行（2026-10-31，`f4d4ad2`）**：两个 job 全绿——前端 16 秒，Rust 冷缓存
 约 12 分钟（`Swatinem/rust-cache` 起了作用之后会快很多）。这一步的意义是：CI 红了就只
 可能是这三道门本身，不会再出现"本地能过、CI 不能过"的模糊地带。
+
+### 2.6 发布构建（`.github/workflows/release.yml`，手动触发）
+
+**为什么另有一个工作流**：SignPath 只签"由 GitHub 工作流构建、并且先作为 workflow
+artifact 存在过"的产物，本地 `npm run tauri build` 的 exe 它不签。所以"要签名"这件事反
+过来要求"发布包也能在 CI 里构建出来"。
+
+它做五件事：按 tag 检出 → `npm ci` + `npx tauri build --bundles nsis` → 把安装包上传为
+artifact →（若配置了 SignPath 的 vars）提交签名并取回签名产物 → 算 SHA-256 并 `gh release
+upload --clobber` 附到同名 Release。**不自动触发**，只在 Actions 页面手动 Run workflow
+（或 `gh workflow run release.yml -f tag=v0.1.2`）。
+
+签名那一步用 `if: vars.SIGNPATH_PROJECT_SLUG != ''` 挡着：没配变量就只构建、只附件，不会
+因为缺 token 而红。申请与接入清单见 `docs/SIGNPATH.md`。
 
 ---
 
@@ -473,7 +487,7 @@ export async function fetchImages(
 | 360 壁纸是**非公开 API**：无文档、无 SLA，随时可能改或关；而且**没有内容分级参数**，只能固定动漫分类 | `sources/builtin/sources.json` | 挂了就改一段 JSON（图源是数据的好处）；内容限制见 `docs/SOURCES-CN.md` §5 |
 | ~~没有 CI~~ | `.github/workflows/ci.yml` | **已还**：Rust 三道门 + 前端 tsc/vite，两个 job。**CI 不打包、不测数字**（体积/内存必须真机测），见 §2.5 |
 | **`bench/make_icon.py` 的旧版本里有一个个人路径**（某人的图片目录），出现在提交 `d0d6373` | `bench/make_icon.py` | HEAD 已清掉（改成参数 / `MOE_ICON_SRC`）。**历史没重写**：重写会改掉之后所有提交的哈希、还要移动 `v0.1.2` tag，代价远大于这个泄漏。**别以为历史是干净的** |
-| **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | 公开分发的第一个版本再签：首选免费的 SignPath Foundation（**仓库已 public，资格条件已满足**），其次 OV 证书 + token；**不买 EV、不自签发给用户**。方案、命令、资格限制见 `docs/SIGNING.md` |
+| **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | **SignPath Foundation 申请中**（材料与接入清单见 `docs/SIGNPATH.md`，签名步骤已预置在 `.github/workflows/release.yml`）。等它之前：每个 Release 必须写 SHA-256。**不买 EV、不自签发给用户** |
 
 ---
 
