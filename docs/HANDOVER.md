@@ -17,6 +17,10 @@
   详情页（点缩略图看大图，页面上「设为壁纸」/「下载」）+ 搜索 + 翻页 + 分辨率筛选 +
   三种主题，其中玻璃主题是**真 Acrylic**（桌面透上来，亮/暗两套已用整屏截图验过）。
   壁纸格式支持 JPEG / PNG / WebP / GIF（webp 先转码成 JPEG，不依赖商店扩展）。
+- **范围（2026-10-31 定的）**：`v0.1.x` **只做内置图源**；让用户自己接图源放到 `v0.2.0`。
+  所以 `sfwQuery` 强制校验、图源格式向后兼容这些"自定义图源前置条件"**不阻塞现在的发布**
+- **签名**：现在**不签**（仓库还 private），公开分发的第一个版本再签；方案与命令见
+  `docs/SIGNING.md`。发布页必须写 SHA-256，这条不因为有没有签名而变
 - **代码量**：约 90 个受管文件，Rust 约 2,440 行、前端 TS 约 690 行（都含注释和测试）。
   **你读得完。**
 
@@ -177,7 +181,8 @@ Meowallpaper/
 ├─ .github/
 │  └─ pull_request_template.md ← 合并前的检查清单
 └─ docs/
-   ├─ BENCHMARK.md             ← 安装包体积怎么测（还没测）
+   ├─ BENCHMARK.md             ← 四个数字怎么测、原始值、踩过的坑
+   ├─ SIGNING.md               ← 代码签名：五种方案的资格与价格、命令、本项目的决定
    └─ HANDOVER.md              ← 本文件
 ```
 
@@ -461,7 +466,8 @@ export async function fetchImages(
 | 详情页没有焦点陷阱（Tab 能跑到覆盖层后面的元素） | `src/main.ts` | 无障碍完善时再加 `inert` 或焦点循环；不影响键盘关闭 |
 | `ToggleChange.kind` 那种"用 String 当枚举"的写法 | 暂无（参考项目里有） | 见到就改成 `enum` |
 | 360 壁纸是**非公开 API**：无文档、无 SLA，随时可能改或关；而且**没有内容分级参数**，只能固定动漫分类 | `sources/builtin/sources.json` | 挂了就改一段 JSON（图源是数据的好处）；内容限制见 `docs/SOURCES-CN.md` §5 |
-| 没有 CI | — | 等真实图源接上后，加一个跑三道门的 workflow |
+| ~~没有 CI~~ | `.github/workflows/ci.yml` | **已还**：Rust 三道门 + 前端 tsc/vite，两个 job。**CI 不打包、不测数字**（体积/内存必须真机测），见 §2.5 |
+| **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | 现在不签（仓库还 private）。公开分发的第一个版本再签：首选免费的 SignPath Foundation，其次 OV 证书 + token；**不买 EV、不自签发给用户**。方案、命令、资格限制见 `docs/SIGNING.md` |
 
 ---
 

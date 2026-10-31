@@ -6,6 +6,10 @@
 
 [![CI](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml)
 
+> **安装包还没有代码签名。** 首次运行可能被 SmartScreen 警告，部分杀软会直接拦。
+> 请用发布页上的 SHA-256 校验；签名方案（以及为什么 EV 证书不值得买）写在
+> [docs/SIGNING.md](docs/SIGNING.md)。
+
 > **状态：`v0.1.2`。** ✅ 已完成 · 🚧 进行中 · 📋 计划中。只有 [Roadmap](#roadmap) 里的内容才算数。
 
 ## 这个项目想解决什么
@@ -238,7 +242,7 @@ npm run tauri build    # release 构建；安装包出现在 src-tauri/target/re
 | --- | --- | --- |
 | `v0.1.1` | **国内直连图源**（360 壁纸动漫分类）+ 偏移量分页、合并尺寸字段、图片 https 升级 | ✅ |
 | `v0.1.2` | 玻璃主题**跟随系统亮/暗**（半透明，不做全透明）；新增 safebooru 图源、lolicon 内容标注 | ✅ |
-| `v0.2.0` | **桌面挂件** + **允许用户接入自己的 API** | 📋 |
+| `v0.2.0` | **桌面挂件** + **允许用户接入自己的 API**（`v0.1.x` 只做内置图源，这是决定） | 📋 |
 | `v0.3.0` | 桌面挂件 | 📋 |
 | `v0.4.0` | 插件式图源（前提：声明式格式真的不够用了） | 📋 |
 | 未排期 | CI、自动更新、界面多语言、详情页焦点陷阱 | 📋 |

@@ -6,6 +6,11 @@
 
 [![CI](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/Remblued/MoeWallpaper/actions/workflows/ci.yml)
 
+> **The installer is not code-signed yet.** SmartScreen may warn on first run, and some
+> antivirus products will block it outright. Verify the SHA-256 published on the release
+> page instead; the signing plan (and why EV certificates are not worth it) is in
+> [docs/SIGNING.md](docs/SIGNING.md).
+
 > **Status: `v0.1.2`.** ✅ done · 🚧 in progress · 📋 planned. Only the [Roadmap](#roadmap) describes what actually ships.
 
 ## The idea
@@ -264,7 +269,7 @@ directories, so a folder is created when its first real file is written, not bef
 | --- | --- | --- |
 | `v0.1.1` | **A domestic source that works without a proxy** (360 anime category), plus offset paging, combined-resolution fields and an image https upgrade | ✅ |
 | `v0.1.2` | Glass theme **follows the system light/dark setting**; new safebooru source and a content note on lolicon; then **real Acrylic** (desktop shows through), **webp/PNG/GIF wallpapers**, real 360 thumbnails, and CI | ✅ |
-| `v0.2.0` | **Desktop widget** and **user-supplied APIs** | 📋 |
+| `v0.2.0` | **Desktop widget** and **user-supplied sources** — `v0.1.x` ships built-in sources only, by decision | 📋 |
 | `v0.3.0` | Desktop widget (桌面挂件) | 📋 |
 | `v0.4.0` | Pluggable sources, if the declarative format ever stops being enough | 📋 |
 | unscheduled | CI, auto-update, UI i18n, focus trap in the detail view | 📋 |
