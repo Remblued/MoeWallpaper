@@ -4,6 +4,19 @@
 > **不需要个人身份公证**；他们验证并背书的是"这个二进制由这个仓库的 GitHub 工作流构建"。
 > 申请入口：<https://signpath.org/apply>（表单要到他们的 Web 应用里填）。
 
+## 0. 状态（2026-10-31）
+
+**已提交，已收到确认邮件，等人工审核。** 原文要点：
+
+> "We've received your application and will review it shortly. Our team will get back to you
+> within the next few business days with next steps or any follow-up questions."
+
+- **不要重复提交。** 表单是 HubSpot 嵌入的（`js-eu1.hsforms.net`），第一次提交时前端一直转圈
+  但其实**已经送达**——重复提交只会被节流或制造重复申请。
+- 如果确认邮件里把收件人名字写错了（会用来创建 SignPath 账号），**回一封邮件更正**，
+  别等账号建好再改。
+- 审核期间能做的都列在 §5.0；等他们回信问问题就照 §3 的材料答。
+
 ## 1. 为什么这一步我不能替你做
 
 申请表需要**你自己的 signpath.io 账号、邮箱验证和项目/维护者信息**，点"提交"之后走的是
@@ -91,6 +104,21 @@ r/opensource、V2EX、少数派之后），再申请。**不要为了过审编�
 
 ## 5. 批准之后要做的事（5 步）
 
+### 5.0 等审核期间就能做的（不用干等）
+
+1. **装 SignPath GitHub App**（GitHub → Settings → Applications → SignPath）。他们的开源策略
+   要用它做审计/策略评估，早装早省事。
+2. **定好三个 slug**（批准后建项目时直接填，避免临时起名）：
+   - project：`moewallpaper`
+   - signing policy：`release-signing`
+   - artifact configuration：`moewallpaper-nsis`
+3. **想清楚第一个签哪个版本**：**不要**回头签 `v0.1.2`——它的安装包已经发布、哈希已经写进
+   README/BENCHMARK/Release 三处，签名会改字节，等于要同时改三处记录。**从下一个 tag
+   （`v0.1.3`）开始签**：先让 `release.yml` 用新 tag 跑一遍签名的完整流程，`v0.1.2` 保持
+   未签名、哈希不动。
+
+### 5.1 正式接入（5 步）
+
 1. 在 SignPath 建 **project**（slug 建议 `moewallpaper`）、**signing policy**（`release-signing`）、
    **artifact configuration**（§4）。
 2. 拿三样东西：organization id、API token（有 submitter 权限的账号）。
@@ -99,11 +127,16 @@ r/opensource、V2EX、少数派之后），再申请。**不要为了过审编�
    - Variables：`SIGNPATH_ORGANIZATION_ID`、`SIGNPATH_PROJECT_SLUG`、
      `SIGNPATH_SIGNING_POLICY_SLUG`、`SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`
    - `release.yml` 里签名那一步的 `if: vars.SIGNPATH_PROJECT_SLUG != ''` 会在变量就位后自动启用。
-4. 装 **SignPath GitHub App**，并在 Actions 页面手动跑一次
-   `Release → Run workflow`（输入 tag，例如 `v0.1.2`），看 Summary 里的
-   `Signature : Valid`。
+4. 打一个新 tag（`v0.1.3`），在 Actions 页面手动跑
+   `Release → Run workflow`（tag 填 `v0.1.3`），看 Summary 里的 `Signature : Valid`。
 5. **签名会改变文件字节**，所以发布页/文档里的 SHA-256 要换成签名后的值：
    `README`、`docs/BENCHMARK.md` §5、Release 说明三处都要改。CI 的 Summary 会打印新哈希。
+
+**一个已知的覆盖范围限制**：这条流水线签的是**外层安装包**（`MoeWallpaper_*_setup.exe`）。
+安装器里解包出来的 `moe-wallpaper.exe` 是 `tauri build` 现编的，不经过 SignPath，所以**内层
+exe 没有 Authenticode 签名**。要连内层一起签，得改成两阶段（先构建 app exe → 签名 → 再
+打包），或者用 Tauri 的 `signCommand` 在打包过程中逐文件签——**都还没做**，先按"签外层"
+跑通，再决定值不值得做。
 
 ## 6. 验收标准（别只看"没报错"）
 

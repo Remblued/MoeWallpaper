@@ -528,7 +528,7 @@ export async function fetchImages(
 | 360 壁纸是**非公开 API**：无文档、无 SLA，随时可能改或关；而且**没有内容分级参数**，只能固定动漫分类 | `sources/builtin/sources.json` | 挂了就改一段 JSON（图源是数据的好处）；内容限制见 `docs/SOURCES-CN.md` §5 |
 | ~~没有 CI~~ | `.github/workflows/ci.yml` | **已还**：Rust 三道门 + 前端 tsc/vite，两个 job。**CI 不打包、不测数字**（体积/内存必须真机测），见 §2.5 |
 | **`bench/make_icon.py` 的旧版本里有一个个人路径**（某人的图片目录），出现在提交 `d0d6373` | `bench/make_icon.py` | HEAD 已清掉（改成参数 / `MOE_ICON_SRC`）。**历史没重写**：重写会改掉之后所有提交的哈希、还要移动 `v0.1.2` tag，代价远大于这个泄漏。**别以为历史是干净的** |
-| **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | **SignPath Foundation 申请中**（材料与接入清单见 `docs/SIGNPATH.md`，签名步骤已预置在 `.github/workflows/release.yml`）。等它之前：每个 Release 必须写 SHA-256。**不买 EV、不自签发给用户** |
+| **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | **SignPath Foundation 已于 2026-10-31 提交申请并收到确认邮件，等人工审核**（材料、审核期能做的事、批准后的 5 步都在 `docs/SIGNPATH.md`；签名步骤已预置在 `.github/workflows/release.yml`）。审核期间**不要重复提交**。等它之前：每个 Release 必须写 SHA-256。**不买 EV、不自签发给用户** |
 
 ---
 
@@ -564,6 +564,7 @@ export async function fetchImages(
 | 界面点了没反应 | 前端运行时异常，不是 Rust 崩了 | 窗口里 `F12` 看 Console 第一行红字 |
 | 在 AI harness / DSH 里跑 `npm run tauri build` 报 `unrecognized subcommand 'D:\...\DSH Desktop.exe'` | **不是 Tauri 也不是项目的问题**：那个环境里 `node` 其实是 DSH 的 Electron 可执行文件，`process.argv[0]` 是它自己，`@tauri-apps/cli/tauri.js` 推断二进制名失败就把该路径当成子命令 | 用真终端跑 `npm run tauri build`。必须留在 harness 里打包时，先改写 `process.argv` 再 require `tauri.js`（`bench/measure/tauri-cli-workaround.js`）。**别为这个改 `package.json` 或降 CLI 版本** |
 | 打包好的 exe 双击不弹窗、也不出界面；PowerShell 启动则几十毫秒就退出，退出码 `-2147483645`，事件日志和 WER 都干净 | **不是你的代码**。装了第三方杀软（本机是 Kaspersky 21.26，`KLIF`/`klflt` 内核驱动 hook 进程创建），未签名的构建会被它拦掉。先看 `root/SecurityCenter2` 和运行中的过滤驱动 | 把项目目录加进杀软排除项，或临时暂停防护。测量时两个基线要在同一防护状态下跑 |
+| SignPath 申请表：点 Submit 一直转圈；刷新后按钮点不动 | 那张表是 **HubSpot 嵌入表单**（`js-eu1.hsforms.net`）。系统代理指向一个坏节点时，页面 HTML 可能还能从缓存出来，但**表单脚本加载不全**（按钮没绑定）+ **提交 POST 一直 pending**。2026-10-31 实测：这几个域名直连 200/302，走当时的 `127.0.0.1:7890` 全是 000 | **关系统代理**（或换节点 / 给 `signpath.org`、`*.hsforms.net`、`*.hsforms.com`、`*.hs.net` 设 DIRECT）→ `Ctrl+Shift+R` 硬刷新 → 关掉广告拦截扩展。**先查邮箱确认上一次是否其实提交成功**——成功过之后再提交就会表现为点不动。真不行就发 <https://signpath.io/support> 并附 `docs/SIGNPATH.md` 的材料 |
 
 ---
 
