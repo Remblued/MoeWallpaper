@@ -29,3 +29,7 @@ dist-ssr
 # 本地环境变量：密钥、令牌永远不进仓库
 .env
 .env.*
+
+# Python caches（bench/ 下的脚本会生成）
+__pycache__/
+*.pyc

@@ -469,6 +469,7 @@ export async function fetchImages(
 | `ToggleChange.kind` 那种"用 String 当枚举"的写法 | 暂无（参考项目里有） | 见到就改成 `enum` |
 | 360 壁纸是**非公开 API**：无文档、无 SLA，随时可能改或关；而且**没有内容分级参数**，只能固定动漫分类 | `sources/builtin/sources.json` | 挂了就改一段 JSON（图源是数据的好处）；内容限制见 `docs/SOURCES-CN.md` §5 |
 | ~~没有 CI~~ | `.github/workflows/ci.yml` | **已还**：Rust 三道门 + 前端 tsc/vite，两个 job。**CI 不打包、不测数字**（体积/内存必须真机测），见 §2.5 |
+| **`bench/make_icon.py` 的旧版本里有一个个人路径**（某人的图片目录），出现在提交 `d0d6373` | `bench/make_icon.py` | HEAD 已清掉（改成参数 / `MOE_ICON_SRC`）。**历史没重写**：重写会改掉之后所有提交的哈希、还要移动 `v0.1.2` tag，代价远大于这个泄漏。**别以为历史是干净的** |
 | **安装包和 exe 都没有代码签名**（`Get-AuthenticodeSignature` → `NotSigned`）：SmartScreen 会警告、第三方杀软可能拦 | 发布物 | 现在不签（仓库还 private）。公开分发的第一个版本再签：首选免费的 SignPath Foundation，其次 OV 证书 + token；**不买 EV、不自签发给用户**。方案、命令、资格限制见 `docs/SIGNING.md` |
 
 ---

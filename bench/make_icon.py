@@ -1,18 +1,35 @@
-"""meowall.jpg（黑底合成的圆角方图）→ tauri icon 标准素材。
+"""把一张"黑底 + 圆角"的源图处理成 tauri 图标素材（透明圆角 PNG）。
+
+用法：
+    python bench/make_icon.py <源图.jpg>
+    MOE_ICON_SRC=<源图.jpg> python bench/make_icon.py
+
+**源图不在仓库里**（仓库不放图片，见 HANDOVER 的规矩），所以这个脚本只负责
+"怎么把黑底图变成透明圆角"，不负责给你源图。
 
 不猜圆角半径、不依赖 floodfill API，直接做连通域扩散：
-1. 亮度 < 25 的算"黑"
+1. 亮度 < DARK 的算"黑"
 2. 从四条边向里扩散，只在"黑"里面走 → 得到真正的外部区域
 3. 外部 alpha=0；边界 2px 过渡带按亮度算 alpha
 4. 反预乘 F = C / a（底是纯黑，所以 C = a*F）
 """
 
+import os
+import sys
+
 from PIL import Image, ImageFilter
 import numpy as np
 
-SRC = r"D:\gongyuhan\photos\图标\meowall.jpg"
-OUT = r"D:\meowallpaper\Meowallpaper\app-icon.png"
-PREVIEW = r"D:\meowallpaper\Meowallpaper\bench\icon-preview.png"
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+SRC = os.environ.get("MOE_ICON_SRC") or (sys.argv[1] if len(sys.argv) > 1 else "")
+if not SRC:
+    sys.exit("usage: python bench/make_icon.py <source.jpg>  (or set MOE_ICON_SRC)")
+if not os.path.isfile(SRC):
+    sys.exit(f"source image not found: {SRC}")
+
+OUT = os.path.join(REPO, "app-icon.png")
+PREVIEW = os.path.join(REPO, "bench", "icon-preview.png")
 SIZE = 1024
 DARK = 25
 
