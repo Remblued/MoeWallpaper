@@ -56,6 +56,9 @@
 - ❌ 真 Mica/Acrylic：要 `transparent: true` + `DwmSetWindowAttribute`，改动会动到窗口层
 - ✅ 国内图源：360 壁纸（v0.1.1）；2026-10-31 又接上 safebooru，并把 lolicon 的图片域名钉到
   `i.pixiv.re`。**5 个图源实测 4 个能直连**，只有 wallhaven 不行。依据在 `docs/SOURCES-CN.md` §9–§10
+- ✅ 五个图源都能"换一批"：360 用 `randomOffsetMax`、safebooru 用 `randomPageIndexMax`，
+  其余三个接口本身就是随机的。**接新图源必须先回答"第 1 页是不是永远同一批"**——
+  见 `docs/SOURCES-CN.md` §0.1 第 1 条
 - ❌ 定时切换
 - ❌ 没有 CI
 - ⚠️ Electron 基线已经全部测完（安装包 115.57 MB / 安装后 356.77 MB / 冷启动
@@ -390,6 +393,7 @@ export async function fetchImages(
 | **`ResponseMapping.tags` 是死配置**：字段存在、`schema.ts` 里有、360 配置里写了 `"tags": "utag"`，但 `ImageRef` 没有 `tags` 字段、`extract_images` 从不读它、前端也没有任何地方显示——**一个没被消费的承诺** | `sources/model.rs`、`sources/builtin/sources.json`、`src/lib/sources/schema.ts` | 二选一：删干净，或把它接进 `ImageRef → ImageDto → UI`。别让它继续挂着 |
 | `sfwQuery` 是静态追加，无法与 `{query}` 合并；booru 类接口要求所有条件在同一个 `tags` 参数里，两个 `tags` 会让 PHP 取最后一个、搜索词静默丢失 | `sources/fetch.rs::apply_sfw_query` | safebooru 的绕法是把分级写进 URL 模板；根治要改格式（安全条件与搜索词合并） |
 | **"能不能直连"被当成站点属性写进文档**。同一台机器同一天，nekos.best 上午 403、下午 200 | `docs/SOURCES-CN.md`、README | 描述只能写"实测于某时某网络"，不写"国内不可用"。见 `docs/SOURCES-CN.md` §10 第 0 条 |
+| **确定性列表在界面上和"缓存坏了"完全无法区分**：`pid=0`/`start=0` 永远返回同一批，用户关掉重开也一样，只会来报"你程序有 bug"。360 和 safebooru 各踩过一次 | `sources/builtin/sources.json` 的 `filter.random*Max` | 接图源时按 `docs/SOURCES-CN.md` §0.1 逐条过；`fetch.rs::deterministic_first_page_sources_must_declare_randomisation` 守着 safebooru 不被改回确定性 |
 | 前端类型是手抄 Rust 结构体，改一边不会同步另一边 | `lib/api.ts` ↔ `dto.rs` | 结构体超过 5 个时考虑 `ts-rs` 自动生成 |
 | `src/lib/sources/schema.ts` 暂时没人 import | — | 做图源编辑功能时会用到，别当垃圾删了 |
 | 并发下载会撑爆内存（一页 24 张 4K ≈ 120MB） | `wallpaper/download.rs` | 做预加载时必须限并发 |
@@ -425,6 +429,7 @@ export async function fetchImages(
 | 403，正文是 `Just a moment... Enable JavaScript`，响应头带 `Cf-Mitigated: challenge` | **Cloudflare 的 JS 挑战**（konachan.net 就是这样）。TCP 通、应用层拒绝，`reqwest`/`curl` 永远过不去 | 换源。要过这一关得跑无头浏览器，和"轻量"冲突 |
 | 列表能拿到、图全裂；单独取图片地址超时 | 图片域名不通。lolicon 的原始域名 `i.pximg.net` **直连超时**（带不带 `Referer` 都一样） | 把图片域名钉到 `i.pixiv.re`（配置里 `proxy=i.pixiv.re`，有测试守着）。实测 `i.pixiv.re`/`i.pixiv.nl` 4/4 可用 |
 | 搜一个不存在的词 → 显示"没有结果"而不是报错 | **这是对的**，别当 bug 修。safebooru 空结果返回 200 + 0 字节 body，`fetch.rs::parse_body` 把空正文当空列表 | — |
+| **新接的图源每次打开、每次切回都是同一批图** | 该接口的第 1 页是确定性的（`pid=0`、`start=0`），而配置里没配随机 | 配 `randomPageIndexMax`（页码分页）或 `randomOffsetMax`（偏移量分页）。注意随机上限别超过服务端允许的深度（safebooru 是 8000 页）。**别先怀疑缓存**：缩略图缓存按 URL 哈希存，换源不可能命中同一批 URL——先看接口是不是确定性的 |
 | 翻到很深的页 → 报错里写着 `API limited due to abuse` | safebooru 对异常 `pid` 返回 **XML** 而不是 JSON | 正常使用（连发 6 次）不会触发；错误信息现在会带上正文开头，能直接认出来 |
 | 界面点了没反应 | 前端运行时异常，不是 Rust 崩了 | 窗口里 `F12` 看 Console 第一行红字 |
 | 打包好的 exe 双击不弹窗、也不出界面；PowerShell 启动则几十毫秒就退出，退出码 `-2147483645`，事件日志和 WER 都干净 | **不是你的代码**。装了第三方杀软（本机是 Kaspersky 21.26，`KLIF`/`klflt` 内核驱动 hook 进程创建），未签名的构建会被它拦掉。先看 `root/SecurityCenter2` 和运行中的过滤驱动 | 把项目目录加进杀软排除项，或临时暂停防护。测量时两个基线要在同一防护状态下跑 |
