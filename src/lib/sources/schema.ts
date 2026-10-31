@@ -11,9 +11,11 @@
 /** HTTP 请求描述。 */
 export interface HttpRequestSpec {
   /**
-   * 请求地址。支持三个占位符，由代码在发请求前替换：
+   * 请求地址。占位符由后端在发请求前替换：
    * - `{limit}`：本次要几张图（当前页大小）
    * - `{page}`：页码，从 1 开始
+   * - `{pageIndex}`：`page - 1`，给"页码从 0 开始"的接口用（Gelbooru 的 `pid`）
+   * - `{offset}`：`(page - 1) * limit`，给偏移量分页的接口用（360 壁纸的 `start`）
    * - `{query}`：搜索关键词（只有在 `search.url` 里才有意义）
    */
   url: string;
@@ -63,6 +65,27 @@ export interface SourceFilter {
    * 本身只提供安全内容的图源留空。
    */
   sfwQuery?: string;
+  /**
+   * 把图片地址从 `http://` 升级成 `https://`。
+   * 界面跑在安全上下文里，WebView 不会加载 http 图片（表现为"列表有但图全裂"）。
+   */
+  httpsUpgrade?: boolean;
+  /**
+   * 把 `{offset}` 换成随机起点（`limit` 的倍数）。
+   * 给"顺序固定、支持偏移量分页"的图源用，让"翻页"变成"换一批"。
+   * 值 = 想覆盖的总量（接口 total 10000、每页 20 → 填 8000）。
+   */
+  randomOffsetMax?: number;
+  /**
+   * 把 `{pageIndex}` 换成随机页码。给"页码从 0 开始"的图源用。
+   *
+   * **确定性列表必须配它**：safebooru 的 `pid=0` 永远是最新 20 张，
+   * 不配的话用户每次打开看到的都是同一批图——界面上这和"缓存坏了"没法区分。
+   *
+   * 值 = 想覆盖的页数，但别贪大：safebooru 实测 `pid=10000` 正常、
+   * `pid=15000` 起返回 XML 的 `API limited due to abuse`，所以填 8000。
+   */
+  randomPageIndexMax?: number;
 }
 
 /**

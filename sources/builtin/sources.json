@@ -43,6 +43,9 @@
         "width": "width",
         "height": "height"
       },
+      "filter": {
+        "randomPageIndexMax": 8000
+      },
       "search": {
         "url": "https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit={limit}&pid={pageIndex}&tags=rating:general+width:>=1920+{query}",
         "english": true

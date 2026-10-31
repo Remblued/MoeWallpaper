@@ -76,24 +76,40 @@ pub fn substitute_placeholders(url: &str, page: u32, limit: u32) -> String {
     // 让配置写 `{offset}`、由代码算，配置本身就不用做算术。
     let offset = page.saturating_sub(1).saturating_mul(limit);
 
-    substitute_with_offset(url, page, limit, offset)
+    substitute_with_offset(url, page, limit, offset, page.saturating_sub(1))
 }
 
-/// 同上，但偏移量由调用方给。
+/// 同上，但偏移量和页码都由调用方给。
 ///
-/// 分开的理由：顺序固定的图源要的是**随机**偏移量（见 `SourceFilter::random_offset_max`），
-/// 而随机值不能藏在"替换函数"里——那样这个函数就没法测了。
+/// 分开的理由：顺序固定的图源要的是**随机**起点（见 `SourceFilter::random_offset_max`
+/// 和 `random_page_index_max`），而随机值不能藏在"替换函数"里——那样这个函数就没法测了。
 ///
 /// 为什么除了 `{page}` 还要有 `{pageIndex}`：有整类图源（Gelbooru 的 `dapi`，
 /// safebooru 走的就是它）的翻页参数 `pid` 是**从 0 开始的页码**，不是"第几页"，
 /// 也不是字节偏移。实测 `pid=0/1/2` 对应连续的三段结果，每段挪动 `limit` 条——
 /// 也就是说 `pid = page - 1`。少了这个占位符，配置里只能写 `pid={page}`，
 /// 结果是第 1 页就跳到第二批，永远看不见开头那 20 张。
-fn substitute_with_offset(url: &str, page: u32, limit: u32, offset: u32) -> String {
+fn substitute_with_offset(
+    url: &str,
+    page: u32,
+    limit: u32,
+    offset: u32,
+    page_index: u32,
+) -> String {
     url.replace("{page}", &page.to_string())
-        .replace("{pageIndex}", &page.saturating_sub(1).to_string())
+        .replace("{pageIndex}", &page_index.to_string())
         .replace("{limit}", &limit.to_string())
         .replace("{offset}", &offset.to_string())
+}
+
+/// 在 `[0, max)` 里挑一个随机页码。
+///
+/// 和 `random_start_from` 是同一个病、两个药：那个给"偏移量分页"，这个给"页码分页"。
+fn random_page_index_from(seed: u64, max: u32) -> u32 {
+    if max == 0 {
+        return 0;
+    }
+    (seed % max as u64) as u32
 }
 
 /// 在 `[0, max_start)` 里挑一个 `limit` 的倍数。
@@ -168,13 +184,21 @@ fn build_request_url(
         None => page.saturating_sub(1).saturating_mul(DEFAULT_LIMIT),
     };
 
+    // 同一个病、两个药：页码分页的图源随机的是**页码**，不是偏移量。
+    // 不配的话 `{pageIndex}` 就是 `page-1`，第 1 页永远是最新那 20 张——
+    // 用户每次打开看到的都是同一批图，而界面上这和"缓存坏了"没法区分。
+    let page_index = match source.filter.random_page_index_max {
+        Some(max) => random_page_index_from(random_u64(), max),
+        None => page.saturating_sub(1),
+    };
+
     let raw = match (keyword, &source.search) {
         (Some(kw), Some(spec)) => {
             let mapped = search::to_source_query(kw, spec.english);
-            substitute_with_offset(&spec.url, page, DEFAULT_LIMIT, offset)
+            substitute_with_offset(&spec.url, page, DEFAULT_LIMIT, offset, page_index)
                 .replace("{query}", &mapped)
         }
-        _ => substitute_with_offset(&source.request.url, page, DEFAULT_LIMIT, offset),
+        _ => substitute_with_offset(&source.request.url, page, DEFAULT_LIMIT, offset, page_index),
     };
 
     let raw = apply_sfw_query(&raw, &source.filter);
@@ -323,6 +347,7 @@ mod tests {
             sfw_query: query.map(str::to_string),
             https_upgrade: false,
             random_offset_max: None,
+            random_page_index_max: None,
         }
     }
 
@@ -641,10 +666,17 @@ mod tests {
             "width:>=1920 应该由服务端过滤生效"
         );
 
-        let page2 = fetch_source_images(src, 2, None).await.unwrap();
-        assert_ne!(
-            images[0].image_url, page2[0].image_url,
-            "{{pageIndex}} 没生效：第 2 页和第 1 页的首图一样"
+        // 连续拉三次第 1 页，首图不能都一样——否则"每次打开都是同一批图"，
+        // 用户会以为缓存坏了。这条和 360 的那条是同一个不可退回的性质。
+        let mut firsts = std::collections::HashSet::new();
+        firsts.insert(images[0].image_url.clone());
+        for _ in 0..2 {
+            let again = fetch_source_images(src, 1, None).await.unwrap();
+            firsts.insert(again[0].image_url.clone());
+        }
+        assert!(
+            firsts.len() > 1,
+            "三次请求拿到同一张图，随机页码没生效：{firsts:?}"
         );
     }
 
@@ -675,6 +707,67 @@ mod tests {
     fn page_index_never_underflows() {
         let url = substitute_placeholders("https://a.com/api?pid={pageIndex}", 0, 20);
         assert!(url.contains("pid=0"), "{url}");
+    }
+
+    #[test]
+    fn random_page_index_is_within_bounds() {
+        for seed in 0..200u64 {
+            let idx = random_page_index_from(seed, 8000);
+            assert!(idx < 8000, "页码必须在上限内：{idx}");
+        }
+    }
+
+    #[test]
+    fn random_page_index_covers_many_pages() {
+        // 只有几个取值就等于没随机
+        let picks: std::collections::HashSet<u32> = (0..50u64)
+            .map(|s| random_page_index_from(s, 8000))
+            .collect();
+        assert!(picks.len() > 40, "随机页码太集中：{}", picks.len());
+    }
+
+    #[test]
+    fn degenerate_random_page_bounds_do_not_panic() {
+        assert_eq!(random_page_index_from(123, 0), 0);
+        assert_eq!(random_page_index_from(123, 1), 0);
+    }
+
+    /// 新接的图源必须是"每次换一批"，不能是"第 1 页永远同一批"。
+    ///
+    /// 这条测试挡的是真实发生过的事故：safebooru 的 `pid=0` 永远是最新 20 张，
+    /// 用户每次打开、每次切回这个图源看到的都是同一批图，
+    /// 而界面上这和"缓存坏了"完全无法区分（关了重开也还是那些图）。
+    ///
+    /// 判定标准就一句：**这个图源的第 1 页是不是永远相同的结果？**
+    #[test]
+    fn deterministic_first_page_sources_must_declare_randomisation() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "safebooru")
+            .expect("内置图源里应该有 safebooru");
+
+        assert!(
+            source.filter.random_page_index_max.is_some(),
+            "safebooru 用 pid 分页，不配 randomPageIndexMax 的话第 1 页永远是最新那 20 张"
+        );
+
+        // 配了还不够，得真的体现在请求地址里：连要两次不能总是同一个 pid
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..8 {
+            let url = build_request_url(source, 1, None).unwrap();
+            let pid = url
+                .query_pairs()
+                .find(|(k, _)| k == "pid")
+                .map(|(_, v)| v.into_owned())
+                .expect("地址里应该有 pid");
+            seen.insert(pid);
+        }
+        assert!(
+            seen.len() > 1,
+            "八次请求拿到了同一个 pid（{seen:?}），随机页码没生效"
+        );
     }
 
     /// 空正文 = 没有结果，不是解析失败。

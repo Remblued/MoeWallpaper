@@ -85,6 +85,20 @@ pub struct SourceFilter {
     /// 填"想覆盖的总量"：接口 `total` 是 10000、每页 20，就填 8000。
     #[serde(default)]
     pub random_offset_max: Option<u32>,
+    /// 把 `{pageIndex}` 换成**随机页码**，用于"用 0 起页码分页"的图源。
+    ///
+    /// 和 `random_offset_max` 是同一个病、两个药：safebooru（Gelbooru `dapi`）的 `pid`
+    /// 是页码，`pid=0` 永远是"最新那 20 张"。不配这个值，用户每次打开、每次切回这个
+    /// 图源看到的都是同一批图——**界面上这和"缓存坏了"完全无法区分**。
+    ///
+    /// 所以新接图源时必须问自己一句：第 1 页是不是永远同一批？
+    /// 是就配这个（或 `random_offset_max`），别等用户来报"图怎么不换"。
+    ///
+    /// 值 = 想覆盖的页数。**不要贪大**：safebooru 实测 `pid=10000`（第 20 万条）
+    /// 还正常、`pid=15000` 起它返回 XML 的 `API limited due to abuse`，
+    /// 所以这里填 8000 而不是几万。
+    #[serde(default)]
+    pub random_page_index_max: Option<u32>,
 }
 
 /// 搜索能力。
