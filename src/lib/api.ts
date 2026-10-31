@@ -19,6 +19,8 @@ export interface WallpaperSource {
   name: string;
   enabled?: boolean;
   homepage?: string | null;
+  /** 内容提示（如"尺度较大"）；有值就在图源名旁标出来。 */
+  contentNote?: string | null;
   /** 不配 = 该图源不支持搜索。 */
   search?: SearchSpec | null;
 }

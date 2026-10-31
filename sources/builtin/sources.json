@@ -95,11 +95,9 @@
       "response": {
         "itemsPath": "results",
         "imageUrl": "url",
-        "pageUrl": "source_url"
-      },
-      "search": {
-        "url": "https://nekos.best/api/v2/search?query={query}&type=1&amount={limit}",
-        "english": true
+        "pageUrl": "source_url",
+        "width": "dimensions.width",
+        "height": "dimensions.height"
       }
     },
     {
@@ -107,6 +105,7 @@
       "name": "Lolicon · Pixiv",
       "enabled": true,
       "homepage": "https://api.lolicon.app/",
+      "contentNote": "尺度较大",
       "request": {
         "url": "https://api.lolicon.app/setu/v2?num={limit}&p={page}&proxy=i.pixiv.re",
         "method": "GET",

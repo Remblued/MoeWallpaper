@@ -8,6 +8,7 @@
   --accent: #646cff;
   --accent-hover: #535bf2;
   --error: #d32f2f;
+  --warn: #b45309;
   --toast-bg: #323232;
   --toast-fg: #ffffff;
   --radius: 8px;
@@ -28,6 +29,7 @@
   --card-border: #3a3a3a;
   --accent: #747bff;
   --accent-hover: #9b9fff;
+  --warn: #fbbf24;
   --toast-bg: #e0e0e0;
   --toast-fg: #1a1a1a;
 }
@@ -135,6 +137,20 @@ body {
 .toolbar input[type="search"]::-webkit-search-cancel-button,
 .toolbar input[type="search"]::-webkit-search-decoration {
   -webkit-appearance: none;
+}
+
+/* ── 图源内容提示 ─────────────────────────────────────────── */
+
+/* 只有图源在配置里写了 contentNote 才会出现（见 sources.json 的 lolicon）。
+   用左侧竖条而不是整块底色：它是一条附注，不该抢过缩略图网格的注意力。 */
+.source-note {
+  margin: 0 0 var(--gap);
+  padding: 6px 10px;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--warn);
+  font-size: 0.85rem;
 }
 
 /* ── Status ───────────────────────────────────────────────── */
@@ -555,6 +571,7 @@ body.detail-open {
   --accent: #8ab4ff;
   --accent-hover: #a9c8ff;
   --error: #ff8a8a;
+  --warn: #ffd479;
   --toast-bg: rgba(18, 24, 38, 0.88);
   --toast-fg: #eef2f8;
 }

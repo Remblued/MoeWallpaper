@@ -454,6 +454,7 @@ mod tests {
             name: "test".to_string(),
             enabled: true,
             homepage: None,
+            content_note: None,
             request: HttpRequestSpec {
                 url: url.to_string(),
                 method: None,
@@ -683,6 +684,57 @@ mod tests {
         assert!(
             searched.as_str().contains("proxy=i.pixiv.re"),
             "搜索地址没钉镜像：{searched}"
+        );
+    }
+
+    /// lolicon 必须带内容提示。
+    ///
+    /// 它固定了 `r18=0`，但 pixiv 的"一般向"里仍有暴露程度较高的图。
+    /// 用户有权在点开之前就知道，所以这条提示是产品要求，不是可选装饰。
+    #[test]
+    fn lolicon_carries_a_content_note() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "lolicon")
+            .expect("内置图源里应该有 lolicon");
+
+        assert!(
+            source
+                .content_note
+                .as_deref()
+                .is_some_and(|n| !n.is_empty()),
+            "lolicon 必须声明 contentNote，否则界面上没有任何提示"
+        );
+    }
+
+    /// nekos.best **不该**提供搜索。
+    ///
+    /// 它的 `/search` 是相关性模糊匹配，而且永不返回空集：实测
+    /// `query=zzzznotexist&type=1&category=neko` 仍然返回 5 张。
+    /// 图片类结果只带 `artist_name`（画师名），用户搜番名/角色名时拿到的是
+    /// 画师名里含相近字母的图——也就是"搜到不符合标签的图"。
+    ///
+    /// 后端没有精确匹配能力 → 配了也只是"静默地不准"。按本项目的规矩，
+    /// 不配 `search` 让界面把搜索框禁用，比配了但不准更诚实。
+    #[test]
+    fn nekos_best_does_not_advertise_search() {
+        let file = crate::sources::loader::load_builtin().unwrap();
+        let source = file
+            .sources
+            .iter()
+            .find(|s| s.id == "nekos-best")
+            .expect("内置图源里应该有 nekos-best");
+
+        assert!(
+            source.search.is_none(),
+            "nekos.best 的搜索无法精确匹配标签，不该在界面上提供"
+        );
+        // 它的响应里其实带 dimensions，映射上以后分辨率筛选才有效
+        assert!(
+            source.response.width.is_some() && source.response.height.is_some(),
+            "nekos.best 返回 dimensions，应该映射成宽高，否则分辨率筛选对它无效"
         );
     }
 

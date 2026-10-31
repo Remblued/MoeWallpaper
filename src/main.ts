@@ -21,6 +21,7 @@ const nextBtn      = document.getElementById("next-page") as HTMLButtonElement;
 const pageLabel    = document.getElementById("page-label") as HTMLSpanElement;
 const resSelect    = document.getElementById("res-select") as HTMLSelectElement;
 const themeBtn     = document.getElementById("theme-toggle") as HTMLButtonElement;
+const sourceNoteEl = document.getElementById("source-note") as HTMLParagraphElement;
 
 // ── 状态 ────────────────────────────────────────────────────
 let currentSourceId = "";
@@ -433,9 +434,18 @@ gridEl.onclick = (e) => {
   openDetail(img);
 };
 
-// ── 搜索框状态同步 ──────────────────────────────────────────
+// ── 图源相关的界面同步 ──────────────────────────────────────
 
-function updateSearchBoxState() {
+/**
+ * 把界面同步到"当前选中的图源"。
+ *
+ * 两件事：搜索框能不能用、有没有内容提示。
+ *
+ * 搜索框为什么是禁用而不是隐藏：**不配 `search` 的图源 = 不支持搜索**，
+ * 让它保持可见但禁用、placeholder 写明原因，用户才知道这是图源的边界，
+ * 而不是以为程序坏了。
+ */
+function syncSourceUi() {
   const source = allSources.find((s) => s.id === currentSourceId);
   const supportsSearch = source?.search != null;
 
@@ -447,6 +457,16 @@ function updateSearchBoxState() {
   // 切换图源时清空搜索
   searchInput.value = "";
   currentQuery = "";
+
+  // 内容提示（如"尺度较大"）。图源没声明就整块隐藏，不留空行。
+  const note = source?.contentNote;
+  if (source && note) {
+    sourceNoteEl.textContent = `⚠ ${source.name}：${note}`;
+    sourceNoteEl.hidden = false;
+  } else {
+    sourceNoteEl.textContent = "";
+    sourceNoteEl.hidden = true;
+  }
 }
 
 // ── 翻页 ────────────────────────────────────────────────────
@@ -538,9 +558,13 @@ async function init() {
     sources = sources.filter((s) => s.enabled !== false);
     allSources = sources;
 
-    // 填充下拉框（escape 防注入）
+    // 填充下拉框（escape 防注入）。
+    // 有 contentNote 的图源在名字后面标出来——用户在选之前就该知道。
     sourceSelect.innerHTML = sources
-      .map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`)
+      .map((s) => {
+        const label = s.contentNote ? `${s.name}（${s.contentNote}）` : s.name;
+        return `<option value="${esc(s.id)}">${esc(label)}</option>`;
+      })
       .join("");
     sourceSelect.disabled = false;
 
@@ -551,7 +575,7 @@ async function init() {
     // 切换图源
     sourceSelect.onchange = () => {
       currentSourceId = sourceSelect.value;
-      updateSearchBoxState();
+      syncSourceUi();
       loadImages(currentSourceId, currentQuery || undefined);
     };
 
@@ -582,8 +606,8 @@ async function init() {
       if (lastImages.length > 0) refreshGrid();
     };
 
-    // 初始化搜索框状态
-    updateSearchBoxState();
+    // 初始化搜索框 / 内容提示
+    syncSourceUi();
 
     // 首次加载
     if (currentSourceId) {

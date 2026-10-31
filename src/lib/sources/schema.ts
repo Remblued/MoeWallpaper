@@ -131,6 +131,13 @@ export interface WallpaperSource {
   enabled?: boolean;
   /** 站点主页，用于在界面上标注来源。 */
   homepage?: string;
+  /**
+   * 内容提示，比如"尺度较大"。有值就显示在图源名旁边。
+   *
+   * 这是**提示**不是过滤器——本项目没有机器判定的能力分级，
+   * 别把它当成"配了就等于过滤掉了"。
+   */
+  contentNote?: string;
   request: HttpRequestSpec;
   response: ResponseMapping;
   filter?: SourceFilter;

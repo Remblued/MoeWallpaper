@@ -145,6 +145,15 @@ pub struct WallpaperSource {
     #[serde(default)]
     pub enabled: bool,
     pub homepage: Option<String>,
+    /// 内容提示，比如"尺度较大"。有值就会显示在图源名旁边。
+    ///
+    /// **为什么要这个字段**：`lolicon` 即使固定 `r18=0`，pixiv 的"一般向"里仍然有
+    /// 暴露程度较高的图。用户有权在点开之前就知道，而不是打开大图才发现。
+    ///
+    /// 它是**提示**不是过滤器：本项目没有任何机器判定的能力分级，
+    /// 所以这里只写人能看懂的一句话，不假装能拦住什么。
+    #[serde(default)]
+    pub content_note: Option<String>,
     pub request: HttpRequestSpec,
     pub response: ResponseMapping,
     #[serde(default)]
