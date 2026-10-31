@@ -16,7 +16,7 @@ app whose main job is "show a grid of images and set one as the wallpaper".
 MoeWallpaper makes one bet — a wallpaper app does not need a full browser runtime
 bundled per app — and three commitments to go with it:
 
-1. **Small install.** Measured at **1.81 MB**, not estimated. See
+1. **Small install.** Measured at **1.82 MB**, not estimated. See
    [Size, measured not claimed](#size-measured-not-claimed).
 2. **Sources are data, not code.** Adding an image source means editing a JSON file.
    There is no plugin runtime, no scripting layer, no per-source native module.
@@ -64,42 +64,63 @@ Every number in this table is produced on one machine, with one method, on the s
 day, from a **release** build. `TBD` means *not measured yet* — **all four cells are
 measured, there is no `TBD` left**. The method lives in [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
-| Metric | MoeWallpaper | Minimal Electron app | How it is measured |
+| Metric | MoeWallpaper `v0.1.2` | Minimal Electron app | How it is measured |
 | --- | --- | --- | --- |
-| Installer size (`.exe`) | **1.81 MB** | **115.57 MB** | file size of the installer produced by the build |
-| Installed size on disk | **5.38 MB** | **356.77 MB** | sum of all files under the install directory |
-| Cold start to visible window | **29.5 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
-| Idle memory (60 s after launch) | **233 MB** (private) | **133.5 MB** (private) | all app + webview processes, not just the main one |
+| Installer size (`.exe`) | **1.82 MB** | **115.57 MB** | file size of the installer produced by the build |
+| Installed size on disk | **5.39 MB** | **356.77 MB** | sum of all files under the install directory |
+| Cold start to visible window | **31 ms** (median) | **104.5 ms** (median) | median of 10 launches, from CreateProcess to first window |
+| Idle memory (60 s after launch) | **198.6 MB** (private, empty grid)<br>**465.8 MB** (private, 20 images loaded) | **133.5 MB** (private, blank window) | whole process tree, not just the main process; both window states measured |
 
-The installer is **about 64× smaller** (115.57 MB versus 1.81 MB) and cold start is
-**about 3.5× faster**.
+The installer is **about 64× smaller** (115.57 MB versus 1.82 MB), the installed
+footprint is **about 66× smaller**, and cold start is **about 3.4× faster**.
 
 Measurement environment (see the [BENCHMARK record](docs/BENCHMARK.md)):
-Intel i7-14650HX / 31.6 GB / Windows 11 build 26200.9711 / release build
-(LTO + strip) / commit `74d4170`.
+Intel i7-14650HX / 31.6 GB / Windows 11 build 26200 / release build
+(LTO + strip) / commit `24f4cbc` (`v0.1.2`).
 
-**Two caveats that belong with these numbers:**
+**Three caveats that belong with these numbers:**
 
 - **The installer does not include the WebView2 runtime.** Windows 11 ships it;
   Windows 10 downloads roughly 100 MB on first install. So this is not
-  "1.81 MB everywhere".
+  "1.82 MB everywhere".
 - **Cold start is *window appears*, not *page rendered*.** The latter is a few
-  hundred milliseconds later.
+  hundred milliseconds later. The very first launch after installing measured
+  203 ms (AV scan + cold file read); the steady median is 31 ms.
+- **Idle memory is meaningless without the window state.** Decoded images land in
+  private memory: the same exe sits at 198.6 MB with an empty grid and 465.8 MB
+  once the default source's 20 images are on screen (median of 7 runs, range
+  187.0–580.5 MB). Reporting a single number would merge two different scenarios.
 
-Idle memory is reported as **private** (233 MB), not working set (399 MB) — summing
-working sets double-counts DLL pages shared between the app and WebView2 processes.
+Idle memory is reported as **private**, not working set (371.6 MB empty, 450.9 MB
+loaded) — summing working sets double-counts DLL pages shared between the app and
+WebView2 processes.
 
-**This is the metric we lose: 233 MB against 133.5 MB, 99 MB more.** We do not bundle
-a browser engine; we borrow the system WebView2, which spawns three extra helper
-processes and puts 117 MB private into its GPU process alone. Electron's bundled
-Chromium holds the same blank page in 133.5 MB. **It is written down here rather than
-softened.**
+**This is the metric we lose, but the comparison has to match.** The Electron
+baseline is **a blank window that loads no images**, so the only row it can be
+compared with is our *empty grid*: **198.6 MB against 133.5 MB, 65.1 MB more
+(1.49×)**. The gap shows up in the process count: we run 7 processes, Electron 4,
+and our idle GPU process alone holds 102 MB private. **The loaded 465.8 MB must
+not be compared with the blank 133.5 MB** — that would be "20 1080p wallpapers"
+against "nothing on screen". An Electron app showing the same 20 images would
+grow too; this minimal baseline simply cannot measure that side.
 
 That 356.77 MB is not padding either: a single file, `BaselineElectron.exe`, is
-238.23 MB — 44× the entire installed footprint of this project (5.38 MB).
+238.23 MB — 44× the entire installed footprint of this project (5.39 MB).
 
-That 117 MB GPU process is not something this project can optimise away, and no amount
-of work on image loading would move it — the memory is not on our side of the fence.
+**Where the memory can actually go is now on record: 198.6 MB with no images,
+465.8 MB with 20 of them — a difference of about 267 MB that comes from the images
+themselves.** The default source (360) returns full-size wallpapers in its
+`url_thumb` field — measured at 1920×1080 and 2560×1440, not thumbnails (see
+[BENCHMARK §5](docs/BENCHMARK.md)) — so the grid decodes 20 full-resolution
+wallpapers. The direction is therefore "stop decoding full-size images in the
+grid" (smaller thumbnails, or fewer cards). **That is a direction, not an
+implementation: nothing has been changed or measured on it.** The per-process
+shell cost of a few tens of MB is not something the frontend can move.
+
+**The 233 MB recorded for `a65d7ed` is retired**: that run measured a
+wallhaven-thumbnail window, which is not the state this version ships with, and
+the "no images" state had never been measured at all. The old figure stays in the
+[BENCHMARK record](docs/BENCHMARK.md); do not quote the two interchangeably.
 
 Two rules keep this honest:
 

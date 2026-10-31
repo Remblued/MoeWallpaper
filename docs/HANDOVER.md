@@ -65,8 +65,11 @@
 - ❌ 定时切换
 - ❌ 没有 CI
 - ⚠️ Electron 基线已经全部测完（安装包 115.57 MB / 安装后 356.77 MB / 冷启动
-  104.5 ms / 空闲 133.5 MB 私有）。**但空闲内存这一项我们是输的**：218 MB 对
-  133.5 MB，别在外面说"内存更省"。详见 `docs/BENCHMARK.md` §5
+  104.5 ms / 空闲 133.5 MB 私有）。MoeWallpaper `v0.1.2` 的四个数已在其 release
+  构建上重测（1.82 MB / 5.39 MB / 31 ms / **198.6 MB 无图、465.8 MB 有图**），
+  **空闲内存这一项我们仍然是输的，而且要看跟哪个状态比**：和空白窗口对齐只能拿
+  "无图"那格（198.6 对 133.5，多 65.1 MB）；有图那格不能拿去和空白窗口比。
+  别在外面只说"内存 465.8 MB"，那是 20 张 1080p 图解码后的数字。详见 `docs/BENCHMARK.md` §5
 
 ---
 
@@ -398,6 +401,8 @@ export async function fetchImages(
 | 国内免费接口几乎都是"单图 302 / 直接返回一张图"，不是列表；本项目 schema 只吃列表 | `sources/model.rs` | 要支持单图源，得加一种 source 类型（v0.4 插件化时一起做）。**2026-10-31 实测清单见 `docs/SOURCES-CN.md` §7、§9** |
 | 360 壁纸有动漫分类（`cid=26`），但**不是公开 API**，条款不明，而且 `start` 是偏移量不是页码 | — | 已在 v0.1.1 接入并排第一；条款与风险见 `docs/SOURCES-CN.md` §5 |
 | nekos.best 和 lolicon 不提供缩略图，网格会直接加载原图（一张 2–9MB） | `sources/builtin/sources.json` | 要么限制每页数量，要么后端生成缩略图。**safebooru 有 `preview_url`（7.5 KB），说明这不是"没法做"，是那几个接口不给** |
+| **360 的 `url_thumb` 也是原图**：实测 1920×1080 / 2560×1440，不是缩略图。它是**默认图源**，所以打开应用就是解码 20 张全尺寸壁纸——空闲内存"有图 465.8 MB vs 无图 198.6 MB"的差值（约 267 MB）就出在这里 | `sources/builtin/sources.json`（360 的 `thumbnailUrl: url_thumb`） | 要么换一个真给缩略图的字段（该接口有没有？**没查**），要么由后端缩放后本地缓存。2026-10-31 测量数据见 `docs/BENCHMARK.md` §5 |
+| **空闲内存的私有值不能当单一定值**：同一构建、同一界面，7 次采样私有 187.0–580.5 MB，工作集 413.7–532.8 MB。抖动集中在 `gpu-process` 私有（82–480 MB），有时内存"搬"到渲染进程的工作集里 | 测量口径，不是代码 | 对外报中位数 + 区间，并带上界面状态。想只报一个数，得先查清 gpu 进程私有内存为什么跳。见 `docs/BENCHMARK.md` §5 末尾待办 |
 | ~~`{page}` 只能填页码，不支持偏移量分页~~ | `sources/fetch.rs` | **已还**：`{offset}`（`(page-1)*limit`）和 `{pageIndex}`（`page-1`，Gelbooru 的 `pid`）都在 |
 | **`ResponseMapping.tags` 是死配置**：字段存在、`schema.ts` 里有、360 配置里写了 `"tags": "utag"`，但 `ImageRef` 没有 `tags` 字段、`extract_images` 从不读它、前端也没有任何地方显示——**一个没被消费的承诺** | `sources/model.rs`、`sources/builtin/sources.json`、`src/lib/sources/schema.ts` | 二选一：删干净，或把它接进 `ImageRef → ImageDto → UI`。别让它继续挂着 |
 | `sfwQuery` 是静态追加，无法与 `{query}` 合并；booru 类接口要求所有条件在同一个 `tags` 参数里，两个 `tags` 会让 PHP 取最后一个、搜索词静默丢失 | `sources/fetch.rs::apply_sfw_query` | safebooru 的绕法是把分级写进 URL 模板；根治要改格式（安全条件与搜索词合并） |
@@ -443,6 +448,7 @@ export async function fetchImages(
 | **搜索结果明显不相关 / 搜什么都有一堆图** | 该接口的搜索是**相关性排序而不是精确匹配**（nekos.best 就是这样：`zzzznotexist` 也返回 5 张） | 先搜一个保证不存在的词验证。若它不返回空集，正确做法是**摘掉 `search` 块**让界面禁用，而不是加后置过滤——过滤后搜番名会几乎全空，比现在更像坏了。见 `docs/SOURCES-CN.md` §9.5 |
 | 翻到很深的页 → 报错里写着 `API limited due to abuse` | safebooru 对异常 `pid` 返回 **XML** 而不是 JSON | 正常使用（连发 6 次）不会触发；错误信息现在会带上正文开头，能直接认出来 |
 | 界面点了没反应 | 前端运行时异常，不是 Rust 崩了 | 窗口里 `F12` 看 Console 第一行红字 |
+| 在 AI harness / DSH 里跑 `npm run tauri build` 报 `unrecognized subcommand 'D:\...\DSH Desktop.exe'` | **不是 Tauri 也不是项目的问题**：那个环境里 `node` 其实是 DSH 的 Electron 可执行文件，`process.argv[0]` 是它自己，`@tauri-apps/cli/tauri.js` 推断二进制名失败就把该路径当成子命令 | 用真终端跑 `npm run tauri build`。必须留在 harness 里打包时，先改写 `process.argv` 再 require `tauri.js`（`bench/measure/tauri-cli-workaround.js`）。**别为这个改 `package.json` 或降 CLI 版本** |
 | 打包好的 exe 双击不弹窗、也不出界面；PowerShell 启动则几十毫秒就退出，退出码 `-2147483645`，事件日志和 WER 都干净 | **不是你的代码**。装了第三方杀软（本机是 Kaspersky 21.26，`KLIF`/`klflt` 内核驱动 hook 进程创建），未签名的构建会被它拦掉。先看 `root/SecurityCenter2` 和运行中的过滤驱动 | 把项目目录加进杀软排除项，或临时暂停防护。测量时两个基线要在同一防护状态下跑 |
 
 ---
