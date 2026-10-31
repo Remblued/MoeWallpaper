@@ -1,6 +1,6 @@
 [package]
 name = "moe-wallpaper"
-version = "0.1.1"
+version = "0.1.2"
 description = "Lightweight anime wallpaper app for Windows, built with Tauri 2"
 authors = ["Remblued <Remblued@users.noreply.github.com>"]
 license = "MIT"

@@ -560,33 +560,78 @@ body.detail-open {
   outline-offset: 2px;
 }
 
-/* ── 玻璃主题 ─────────────────────────────────────────────── */
+/* ── 玻璃主题（半透明，跟随系统亮/暗）────────────────────── */
 
-/* 底色铺三层径向渐变：模糊需要"有东西可模糊"，纯色底上做毛玻璃什么也看不出来。 */
+/* 为什么用 `prefers-color-scheme` 而不是自己读系统设置：
+   媒体查询在系统切换主题时会**自动重新生效**，不需要监听、不需要 IPC，
+   也不会和应用内的主题选择打架——它是浏览器层的能力。
+   WebView2 跟随 Windows 的应用主题，所以这就等于"跟着系统变化"。
+
+   两套变量：默认是系统**亮色**下的玻璃，`@media (prefers-color-scheme: dark)`
+   再覆盖成暗色玻璃。半透明程度由 rgba 的 alpha 控制，**不做全透明**。 */
 :root[data-theme="glass"] {
-  --bg: #0d1120;
-  --fg: #eef2f8;
-  --card-bg: rgba(255, 255, 255, 0.07);
-  --card-border: rgba(255, 255, 255, 0.16);
-  --accent: #8ab4ff;
-  --accent-hover: #a9c8ff;
-  --error: #ff8a8a;
-  --warn: #ffd479;
-  --toast-bg: rgba(18, 24, 38, 0.88);
-  --toast-fg: #eef2f8;
+  --bg: #eef1f7;
+  --fg: #12161f;
+  --card-bg: rgba(255, 255, 255, 0.58);
+  --card-border: rgba(255, 255, 255, 0.85);
+  --accent: #3f6bd8;
+  --accent-hover: #2f57bd;
+  --error: #c62828;
+  --warn: #b45309;
+  --toast-bg: rgba(252, 253, 255, 0.9);
+  --toast-fg: #12161f;
+
+  /* 玻璃面的观感集中在这四个变量里，亮/暗两套只换它们，不重写规则 */
+  --glass-shadow: 0 8px 24px rgba(31, 45, 74, 0.12);
+  --glass-shadow-hover: 0 12px 32px rgba(31, 45, 74, 0.18);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --glass-scrim: rgba(238, 242, 249, 0.55);
 }
 
+/* 亮色玻璃的底：三层浅色径向渐变。
+   模糊需要"有东西可模糊"，纯色底上做毛玻璃什么也看不出来。 */
 :root[data-theme="glass"] body {
   background:
-    radial-gradient(120% 90% at 12% 0%, #2b3a5c 0%, transparent 58%),
-    radial-gradient(100% 80% at 88% 8%, #4a2b52 0%, transparent 52%),
-    radial-gradient(90% 70% at 50% 100%, #1b3a3a 0%, transparent 60%),
-    #0d1120;
+    radial-gradient(120% 90% at 12% 0%, #cfe0ff 0%, transparent 58%),
+    radial-gradient(100% 80% at 88% 8%, #ffd9ec 0%, transparent 52%),
+    radial-gradient(90% 70% at 50% 100%, #d8f3ea 0%, transparent 60%),
+    #eef1f7;
   background-attachment: fixed;
 }
 
-/* 毛玻璃面。注意这是**窗口内**的模糊（backdrop-filter），
-   不是把桌面透上来——后者要开窗口透明 + DWM Mica，是另一次改动。 */
+/* 系统是暗色时，覆盖成暗色玻璃 */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="glass"] {
+    --bg: #0d1120;
+    --fg: #eef2f8;
+    --card-bg: rgba(255, 255, 255, 0.07);
+    --card-border: rgba(255, 255, 255, 0.16);
+    --accent: #8ab4ff;
+    --accent-hover: #a9c8ff;
+    --error: #ff8a8a;
+    --warn: #ffd479;
+    --toast-bg: rgba(18, 24, 38, 0.88);
+    --toast-fg: #eef2f8;
+    --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    --glass-shadow-hover: 0 12px 32px rgba(0, 0, 0, 0.38);
+    --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    --glass-scrim: rgba(6, 10, 18, 0.55);
+  }
+
+  :root[data-theme="glass"] body {
+    background:
+      radial-gradient(120% 90% at 12% 0%, #2b3a5c 0%, transparent 58%),
+      radial-gradient(100% 80% at 88% 8%, #4a2b52 0%, transparent 52%),
+      radial-gradient(90% 70% at 50% 100%, #1b3a3a 0%, transparent 60%),
+      #0d1120;
+    background-attachment: fixed;
+  }
+}
+
+/* 毛玻璃面。注意这是**窗口内**的模糊（backdrop-filter）：
+   它模糊的是窗口自己的背景渐变，不是把桌面透上来。
+   要让桌面透上来（像 TranslucentTB 的任务栏那样）需要开窗口透明
+   再调 DWM 背景，那是改窗口层的事，CSS 做不到。 */
 :root[data-theme="glass"] .toolbar,
 :root[data-theme="glass"] .card,
 :root[data-theme="glass"] .pager-btn,
@@ -594,21 +639,17 @@ body.detail-open {
 :root[data-theme="glass"] .toast {
   backdrop-filter: blur(18px) saturate(150%);
   -webkit-backdrop-filter: blur(18px) saturate(150%);
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-shadow: var(--glass-shadow), var(--glass-inset);
 }
 
 :root[data-theme="glass"] .card:hover {
   border-color: var(--accent);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: var(--glass-shadow-hover), var(--glass-inset);
 }
 
 /* 详情页遮罩也在玻璃主题下加一层模糊，否则背后内容太抢眼 */
 :root[data-theme="glass"] .detail-backdrop {
-  background: rgba(6, 10, 18, 0.55);
+  background: var(--glass-scrim);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
