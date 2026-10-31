@@ -38,22 +38,24 @@
 | URL → 文件名 | FNV-1a 哈希 + 扩展名猜测 | `src-tauri/src/fs/naming.rs` |
 | 图源配置解析 | JSON → Rust 结构体（serde） | `src-tauri/src/sources/model.rs` + `loader.rs` |
 | 响应提取 | 点号路径取值 + 按映射提取图片列表 | `src-tauri/src/sources/extract.rs` |
-| 联网拉图 | 共享连接池、`{page}`/`{limit}` 替换、只放行 GET | `src-tauri/src/sources/fetch.rs` |
+| 联网拉图 | 共享连接池、`{page}`/`{pageIndex}`/`{offset}`/`{limit}` 替换、只放行 GET | `src-tauri/src/sources/fetch.rs` |
 | 出参转换 | `ImageRef → ImageDto`，缩略图回退 | `src-tauri/src/sources/dto.rs` |
 | 下载缓存 | 命中就不联网，原子写入 | `src-tauri/src/wallpaper/download.rs` |
 | 设壁纸 | Win32 `SystemParametersInfoW` 手工 FFI | `src-tauri/src/wallpaper/set.rs` |
 | 当前壁纸 | 复制到固定的 `current.jpg`，与缓存解耦 | `src-tauri/src/wallpaper/current.rs` |
 | 四个命令 | `list_sources` / `fetch_images` / `set_wallpaper` / `save_image` | `src-tauri/src/commands/mod.rs` |
-| 真实图源 | wallhaven / nekos.best / lolicon，全部免费、无需 API key | `sources/builtin/sources.json` |
+| 真实图源 | 360 / safebooru / wallhaven / nekos.best / lolicon，全部免费、无需 API key | `sources/builtin/sources.json` |
 | 关键词搜索 | 每个图源可声明自己的搜索地址；中文走本地词表翻成英文标签 | `src-tauri/src/sources/search.rs` + `search/terms.json` |
 | 前端 | 图源下拉、缩略图网格、四态、toast | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
 
-**测试：59 个（58 个自动跑，1 个标记 `#[ignore]` 手动跑——它会真的改桌面）。`cargo clippy -D warnings` 零告警。**
+**测试：87 个（82 个自动跑，5 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）。`cargo clippy -D warnings` 零告警。**
 
 ### 未做（这就是接下来的活）
 
-- ❌ 主题色 / 半透明（B7 / B8，界面活里只剩这两项）
-- ❌ 国内图源（现状见 §7 技术债：国内免费接口几乎都是"单图 302"，不是列表）
+- ✅ 玻璃主题（v0.1.1，窗口内 `backdrop-filter`，不是真 Mica/Acrylic）
+- ❌ 真 Mica/Acrylic：要 `transparent: true` + `DwmSetWindowAttribute`，改动会动到窗口层
+- ✅ 国内图源：360 壁纸（v0.1.1）；2026-10-31 又接上 safebooru，并把 lolicon 的图片域名钉到
+  `i.pixiv.re`。**5 个图源实测 4 个能直连**，只有 wallhaven 不行。依据在 `docs/SOURCES-CN.md` §9–§10
 - ❌ 定时切换
 - ❌ 没有 CI
 - ⚠️ Electron 基线已经全部测完（安装包 115.57 MB / 安装后 356.77 MB / 冷启动
@@ -227,11 +229,21 @@ interface ImageDto {
 | 图源 | 安全来自哪 |
 |---|---|
 | wallhaven | `sfwQuery: "purity=100"` |
-| lolicon | `sfwQuery: "r18=0"` |
+| lolicon | `sfwQuery: "r18=0"` + 图片域名钉在 `i.pixiv.re` |
 | nekos.best | API 本身只提供安全内容，不配 |
+| 360 | 只有分类没有分级，固定 `cid=26 动漫卡通`——**这是本项目的短板，不是保护** |
+| safebooru | 分级写进了 URL 的 `tags=rating:general`，**没有走 `sfwQuery`** |
 
 **所以配图源时的规矩是：只要那个 API 有 NSFW 参数，`sfwQuery` 就必须写。**
 写了才受保护，忘了就没有——这一点只能靠 review 挡，测试挡不住。
+
+**`sfwQuery` 的一个已知局限（safebooru 就是受害者）**：它是**静态追加**的，
+而 booru 类接口要求所有条件都塞进**同一个 `tags` 参数**。如果 browse 用
+`sfwQuery: "tags=rating:general"`、search 模板里再写 `tags={query}`，
+最终地址里会出现两个 `tags`，PHP 取**最后一个**——搜索词被静默丢掉，
+界面表现是"搜什么都回到首页那批图"。
+所以这一类图源只能把分级写进 URL 模板（安全参数仍在，只是不在 `sfwQuery` 这个格子里）。
+要根治得让格式支持"安全条件与搜索词合并"，属于改格式，不是改 JSON。
 
 ---
 
@@ -371,10 +383,13 @@ export async function fetchImages(
 | 安全参数靠"记得配"——图源没写 `sfwQuery` 就没有任何内容限制，而这一点只有 code review 能保证 | `sources/builtin/sources.json` | 做用户自定义图源时，在加载阶段强制校验：要么配 `sfwQuery`，要么显式标记"API 本身只提供安全内容" |
 | 中文词表只收了约 150 个高频词，长尾词翻不了（`search/terms.json`） | `search/terms.json` | 持续加词；搜不到时 UI 已提示改用英文 |
 | 英文译名对不上目标站标签就会搜不到（映射正确 ≠ 标签存在） | `search/terms.json` | 加词时**实测一次**：拿翻出来的英文去 wallhaven 搜，看条数是不是 0 |
-| 国内免费接口几乎都是"单图 302 / 直接返回一张图"，不是列表；本项目 schema 只吃列表 | `sources/model.rs` | 要支持单图源，得加一种 source 类型（v0.4 插件化时一起做） |
-| 360 壁纸有动漫分类（`cid=26`），但**不是公开 API**，条款不明，而且 `start` 是偏移量不是页码 | — | 用户要国内源时再单独评估，别默认塞进去 |
-| nekos.best 和 lolicon 不提供缩略图，网格会直接加载原图（一张 2–4MB） | `sources/builtin/sources.json` | 要么限制每页数量，要么后端生成缩略图 |
-| `{page}` 只能填页码，不支持偏移量分页（`start=(page-1)*limit`） | `sources/fetch.rs` | 加一个 `{offset}` 占位符，约 3 行 |
+| 国内免费接口几乎都是"单图 302 / 直接返回一张图"，不是列表；本项目 schema 只吃列表 | `sources/model.rs` | 要支持单图源，得加一种 source 类型（v0.4 插件化时一起做）。**2026-10-31 实测清单见 `docs/SOURCES-CN.md` §7、§9** |
+| 360 壁纸有动漫分类（`cid=26`），但**不是公开 API**，条款不明，而且 `start` 是偏移量不是页码 | — | 已在 v0.1.1 接入并排第一；条款与风险见 `docs/SOURCES-CN.md` §5 |
+| nekos.best 和 lolicon 不提供缩略图，网格会直接加载原图（一张 2–9MB） | `sources/builtin/sources.json` | 要么限制每页数量，要么后端生成缩略图。**safebooru 有 `preview_url`（7.5 KB），说明这不是"没法做"，是那几个接口不给** |
+| ~~`{page}` 只能填页码，不支持偏移量分页~~ | `sources/fetch.rs` | **已还**：`{offset}`（`(page-1)*limit`）和 `{pageIndex}`（`page-1`，Gelbooru 的 `pid`）都在 |
+| **`ResponseMapping.tags` 是死配置**：字段存在、`schema.ts` 里有、360 配置里写了 `"tags": "utag"`，但 `ImageRef` 没有 `tags` 字段、`extract_images` 从不读它、前端也没有任何地方显示——**一个没被消费的承诺** | `sources/model.rs`、`sources/builtin/sources.json`、`src/lib/sources/schema.ts` | 二选一：删干净，或把它接进 `ImageRef → ImageDto → UI`。别让它继续挂着 |
+| `sfwQuery` 是静态追加，无法与 `{query}` 合并；booru 类接口要求所有条件在同一个 `tags` 参数里，两个 `tags` 会让 PHP 取最后一个、搜索词静默丢失 | `sources/fetch.rs::apply_sfw_query` | safebooru 的绕法是把分级写进 URL 模板；根治要改格式（安全条件与搜索词合并） |
+| **"能不能直连"被当成站点属性写进文档**。同一台机器同一天，nekos.best 上午 403、下午 200 | `docs/SOURCES-CN.md`、README | 描述只能写"实测于某时某网络"，不写"国内不可用"。见 `docs/SOURCES-CN.md` §10 第 0 条 |
 | 前端类型是手抄 Rust 结构体，改一边不会同步另一边 | `lib/api.ts` ↔ `dto.rs` | 结构体超过 5 个时考虑 `ts-rs` 自动生成 |
 | `src/lib/sources/schema.ts` 暂时没人 import | — | 做图源编辑功能时会用到，别当垃圾删了 |
 | 并发下载会撑爆内存（一页 24 张 4K ≈ 120MB） | `wallpaper/download.rs` | 做预加载时必须限并发 |
@@ -405,8 +420,12 @@ export async function fetchImages(
 | 测试**单独跑通过、一起跑失败** | `cargo test` 默认并行，两个测试共用了临时目录/端口 | 每个测试的目录名加自己的标识 |
 | `! [rejected] main -> main (fetch first)` | 远端有你没有的提交 | `git fetch` → `git log --oneline origin/main ^main` 看清 → `git pull --rebase` → 再 push。**别 `--force`** |
 | `Recv failure: Connection was reset`（`git push/fetch`） | 本机代理节点不稳，**不是 git 配置问题** | 换节点 / 稍后重试；`D:\meowallpaper\push-retry.ps1` 会自动重试 |
-| **所有图源一起加载失败 / 连接超时** | 三个内置图源全在海外，**没开系统代理就一个都连不上**。程序会读 Windows 系统代理（`src-tauri/src/net.rs`），但读不到就不走代理 | 确认代理软件在跑、系统代理开着；浏览器能开 wallhaven 就是配好了 |
-| 某个图源 403，正文写着 IP 被拉黑 | nekos.best 按出口 IP 封禁，机场共享 IP 常见 | 换节点，改代码没用 |
+| **某个图源加载失败 / 连接超时** | 直连不通。**别再写"海外图源全挂"**——2026-10-31 实测 5 个图源里 4 个能直连（360 / safebooru / nekos.best / lolicon），只有 wallhaven 不通。程序会读 Windows 系统代理（`src-tauri/src/net.rs`），读不到就不走代理 | 先看是**哪一个**源失败，再决定是换节点还是换源。浏览器能开 wallhaven 就是代理配好了 |
+| 某个图源 403，正文写着 IP 被拉黑 | nekos.best 按出口 IP 封禁，机场共享 IP 常见 | 换节点，改代码没用。**同一天不同时刻结果可能不同**，别据此断言"这个源废了" |
+| 403，正文是 `Just a moment... Enable JavaScript`，响应头带 `Cf-Mitigated: challenge` | **Cloudflare 的 JS 挑战**（konachan.net 就是这样）。TCP 通、应用层拒绝，`reqwest`/`curl` 永远过不去 | 换源。要过这一关得跑无头浏览器，和"轻量"冲突 |
+| 列表能拿到、图全裂；单独取图片地址超时 | 图片域名不通。lolicon 的原始域名 `i.pximg.net` **直连超时**（带不带 `Referer` 都一样） | 把图片域名钉到 `i.pixiv.re`（配置里 `proxy=i.pixiv.re`，有测试守着）。实测 `i.pixiv.re`/`i.pixiv.nl` 4/4 可用 |
+| 搜一个不存在的词 → 显示"没有结果"而不是报错 | **这是对的**，别当 bug 修。safebooru 空结果返回 200 + 0 字节 body，`fetch.rs::parse_body` 把空正文当空列表 | — |
+| 翻到很深的页 → 报错里写着 `API limited due to abuse` | safebooru 对异常 `pid` 返回 **XML** 而不是 JSON | 正常使用（连发 6 次）不会触发；错误信息现在会带上正文开头，能直接认出来 |
 | 界面点了没反应 | 前端运行时异常，不是 Rust 崩了 | 窗口里 `F12` 看 Console 第一行红字 |
 | 打包好的 exe 双击不弹窗、也不出界面；PowerShell 启动则几十毫秒就退出，退出码 `-2147483645`，事件日志和 WER 都干净 | **不是你的代码**。装了第三方杀软（本机是 Kaspersky 21.26，`KLIF`/`klflt` 内核驱动 hook 进程创建），未签名的构建会被它拦掉。先看 `root/SecurityCenter2` 和运行中的过滤驱动 | 把项目目录加进杀软排除项，或临时暂停防护。测量时两个基线要在同一防护状态下跑 |
 

@@ -187,10 +187,13 @@ http://wallpaper.apc.360.cn/index.php
 | `lines` 响应形态 + 本地切片分页 | `model.rs` / `loader.rs` / `fetch.rs` / `extract.rs` | 约 100–150 行 + 测试 |
 | webp → jpeg（否则"设为壁纸"不可靠） | 新增解码依赖 + `current.rs::publish` 转码 | TBD（安装包会变大，**未实测，不许填估值**） |
 
-## 8. 结论
+## 8. 第二批的结论（几小时后被 §9 部分推翻）
 
-三个海外源要靠代理；国内能直连、又"一次给一批"的，到今天仍然只有 360 一家。
-夜轻是第二个**形态合格**的，但它把成本从"改 JSON"抬到了"改代码 + 加依赖"。
+写这一节时的实测结论是：国内能直连、又"一次给一批"的只有 360 一家。
+**同一天下午复测发现 nekos.best 和 lolicon 直连也是通的**（见 §9.4），
+所以本节只保留"夜轻那次判断"，直连清单以 §10 为准。
+
+夜轻是形态合格的，但它把成本从"改 JSON"抬到了"改代码 + 加依赖"。
 
 判定标准没变：**连"能不能拿来当壁纸"都不确定的，不该现在接。**
 夜轻的图能看、能下载、能分页，唯独最核心的那个动作（设为壁纸）取决于用户装没装
@@ -201,3 +204,122 @@ http://wallpaper.apc.360.cn/index.php
 - [ ] `api.yujn.cn` 的准确端点（目前只测到 404 与超时）
 - [ ] 要不要为 webp 引入解码依赖——这是产品决策：拿体积换格式兼容
 - [ ] 如果两个前提都做了，夜轻值得排在国内源第二位（`pc` 在后，`pe` 可选）
+
+## 9. 第三批：konachan、booru 家族与 pixiv 镜像（2026-10-31）
+
+### 9.1 konachan.net 不是"国内直连会抖"，是 Cloudflare 挑战
+
+| 项 | 实测 |
+| --- | --- |
+| 状态码 | **403**，连续 5 次都一样 |
+| body | 5,563 B 固定（换 Chrome UA 后 5,798 B） |
+| 关键响应头 | `Cf-Mitigated: challenge`、`Server: cloudflare`、`CF-RAY: …-SIN` |
+| 正文 | `Just a moment... Enable JavaScript and cookies to continue` |
+| TCP 连接 | **0.09–0.11 s**（域名和端口完全通） |
+
+所以"会抖"的表象来自这里：**网络层是通的，应用层在拒绝非浏览器客户端**。
+`reqwest` 拿不到数据，跟代理开没开、跟国内国外都没关系——过了这一关要跑无头浏览器，
+那和这个应用"轻量"的定位直接冲突。
+
+同族的其他 booru，逐个测（直连、Chrome UA）：
+
+| 主机 | 结果 |
+| --- | --- |
+| `yande.re/post.json` | 连接超时（20 s） |
+| `danbooru.donmai.us/posts.json` | 连接超时（20 s） |
+| **`safebooru.org`（Gelbooru `dapi`）** | **200，JSON 数组** |
+
+### 9.2 safebooru.org：形态完全合格，已接入
+
+它和 konachan 是同一类东西（动漫插画 booru），但接口无挑战、直连可用，所以直接顶替：
+
+```text
+https://safebooru.org/index.php
+    ?page=dapi&s=post&q=index&json=1
+    &limit=20&pid=0&tags=rating:general+width:>=1920
+→ 200, application/json, 23,526 B, 20 条
+```
+
+实测要点：
+
+- **根就是数组**（没有外层 `data`），本项目 `itemsPath` 缺省即支持
+- 每条有 `preview_url`（缩略图，**7.5 KB**）、`file_url`（原图）、`width`/`height`、`rating`
+- `pid` 是**从 0 开始的页码**：`limit=5` 时 `pid=0/1/2` 各返回连续 5 条、互不重叠 →
+  所以新增了 `{pageIndex}` 占位符（`page - 1`），写 `pid={page}` 会让第 1 页跳过开头 20 张
+- **`tags=safe` 是用户标签，不是分级**：`safe+width:>=1920` 返回的 20 条里
+  19 条带 `safe` 标签、1 条不带——它会误杀没打这个标签的图。真正该用的是
+  **`rating:general`** 这个 metatag，实测 20/20 全是 general
+- 服务端能按分辨率过滤：`width:>=1920` 生效；`width:>=1920+height:>=1080` 也认
+  （但它不保证横图，实测里仍有 3641×4096 这种）
+- 稳定性：间隔 3 s 抽样 **6/6**、不间隔连发 **6/6**，每次 ~0.5 s
+- 我们的 UA（`MoeWallpaper/0.1.1`）**不被拦**，不需要伪装浏览器
+
+两个会把"正常"显示成"出错"的坑，都在接入时修了：
+
+1. **搜不到结果 = 200 + 0 字节 body**。直接 `resp.json()` 会报
+   `EOF while parsing a value`，用户看到报错而不是"没有结果"。
+   现在空正文等价于空列表。
+2. **翻到极端页 = 200 + XML**（`API limited due to abuse`）。正文不是 JSON，
+   现在错误信息里会带上正文开头，一眼能看出是服务端拒绝。
+
+### 9.3 pixiv：要换的不是"另一个 pixiv"，是图片域名
+
+用户记忆里的 `pixiv.moe` 确实死了。但更关键的一条是：**pixiv 图片有两个域名，
+一个通、一个死**，而"镜像"这件事就发生在这里。
+
+| 主机 | 结果 |
+| --- | --- |
+| `i.pximg.net`（pixiv 官方图片域） | **连接超时**（20 s，带不带 `Referer` 都一样） |
+| `i.pixiv.re` | **200 `image/png` 4/4**，路径原样保留 |
+| `i.pixiv.nl` | **200 `image/png` 4/4**，字节数与 `i.pixiv.re` 完全一致 |
+| `pixiv.re` / `pixiv.nl`（裸域名根路径） | 404（它们是路径代理，不是站点） |
+| `i.pixiv.cat` / `pixiv.cat` | 连接超时 |
+| `pixiv.kanata.moe` / `pixiv-image.s3a.dev` | 域名不存在 |
+
+而且：**lolicon 返回的 `urls.original` 默认就已经是 `i.pixiv.re`**（连续 3 次确认），
+不是 `i.pximg.net`。它还有 `proxy=` 参数可以指定图片域名——实测
+`?proxy=i.pximg.net` 会把域名换成那个不通的，说明这个参数是真被消费的。
+
+所以结论是：**不需要找 pixiv 的"国产镜像站"，需要的是把图片域名钉在能通的那个上。**
+配置里已经写死 `proxy=i.pixiv.re`，不赌上游默认值（配了测试守着）。
+
+代价：lolicon 只返回**你请求的那一种尺寸**。默认 `original`，实测一张 6.9 MB，
+首包 7.5 s、热 1.0–1.2 s；`size=regular` 只有 `_master1200`，且响应里就只剩 `regular`
+一个键——想同时要"小图显示 + 原图设壁纸"，一个请求拿不到两个 URL。
+
+### 9.4 复测把 README 的两句话打掉了
+
+直连（`ProxyEnable=0`、代理端口全部未监听、默认路由走 WLAN，已确认没有 TUN 隧道）：
+
+| 图源 | API | 图片 | 结论 |
+| --- | --- | --- | --- |
+| 360 壁纸 | 200，2.46 s | ✅ | 可用 |
+| safebooru | 200，~0.5 s | 200 | **可用** |
+| nekos.best | **200**，1.47–1.62 s，3 条 | 200，`image/png` 2,916,163 B | **可用**（README 里写的"打不开"是错的） |
+| lolicon | **200**，0.95–1.39 s，6/6 | 200（走 `i.pixiv.re`） | **可用**（同上） |
+| wallhaven | 超时 3/3 | — | 不可直连（这条 README 写对了） |
+
+README 原来写的"另外三个海外图源国内直连一个都打不开"已经不成立：
+**5 个图源里 4 个能直连**，只有 wallhaven 不行。
+
+## 10. 结论（截至 2026-10-31）
+
+判定标准补上第 0 条，它比原来那五条更重要：
+
+> **0. "能不能直连"不是站点的属性，是网络和时刻的属性。**
+
+同一天、同一台机器、同一个 `curl`：nekos.best 上午 403（IP 拉黑），下午 200；
+lolicon 之前也 403 过。所以文档里能写的只有"**实测于某时某网络**"，
+不能写"某源国内不可用"——那是把一个瞬时结果当成了终态。
+
+当前状态：
+
+| 图源 | 直连 | 形态 | 状态 |
+| --- | --- | --- | --- |
+| 360 壁纸 | ✅ | JSON（`{offset}` + 随机起点） | 已接入，v0.1.1 |
+| safebooru | ✅ | JSON 根数组（`{pageIndex}`） | **已接入**，本次 |
+| nekos.best | ✅ | JSON（`{limit}`） | 已接入，v0.1.1 |
+| lolicon | ✅ | JSON（`{limit}`/`{page}`，图片钉 `i.pixiv.re`） | 已接入，本次加固 |
+| wallhaven | ❌ 超时 | JSON | 已接入，但需代理 |
+| 夜轻 / konachan / yande.re / danbooru / uapis / apihz / mukyu / xyttkx / yujn | 见 §1、§7、§9 | — | 未接入，各有实测原因 |
+

@@ -25,13 +25,24 @@ bundled per app — and three commitments to go with it:
 
 ## Network requirement
 
-**The default source is domestic: install it and you see images, no proxy needed.**
+**Install it, open it, and you see images. No proxy needed.**
 
-The first built-in source is the anime category of 360 Wallpaper, reachable on a direct
-connection from mainland China (verified). The other three are hosted abroad
-(wallhaven, nekos.best, lolicon) and **none of them is reachable on a direct
-connection here** — not a misconfiguration and not an open bug, they are cut off at the
-carrier or campus network level. Those three need a proxy.
+Measured on 2026-10-31 (Windows 11, direct Wi-Fi, system proxy off, no TUN tunnel):
+**4 of the 5 built-in sources work on a direct connection.**
+
+| Source | Direct | Note |
+|---|---|---|
+| 360 Wallpaper · anime | ✅ | Listed first, so it is what you see on launch |
+| Safebooru | ✅ | Anime illustrations; `width:>=1920` is filtered server-side, thumbnails included |
+| nekos.best | ✅ | Reports no dimensions, so the resolution filter does not apply |
+| Lolicon · Pixiv | ✅ | Images go through the `i.pixiv.re` mirror (upstream `i.pximg.net` does not connect) |
+| Wallhaven | ❌ connection timeout | The only one that needs a proxy |
+
+**"Reachable" is a property of the exit network and the moment, not of the site.** On the
+same day nekos.best answered 403 in the morning (IP-based blocking) and 200 in the
+afternoon; lolicon has done the same. The cause sits outside the app. So the table above
+means "measured on this network, at that time" — not "guaranteed available in mainland
+China".
 
 The app **reads the Windows system proxy setting automatically** (the one under
 "Internet Options"); there is nothing to configure inside the app. It is used only when
@@ -103,7 +114,7 @@ Two rules keep this honest:
 
 | Feature | Status |
 | --- | --- |
-| Fetch from declarative JSON sources (wallhaven / nekos.best / lolicon) | ✅ |
+| Fetch from declarative JSON sources (360 / safebooru / wallhaven / nekos.best / lolicon) | ✅ |
 | Thumbnail grid with skeleton and broken-image fallback | ✅ |
 | Detail view: full image, set as wallpaper, download, open source page | ✅ |
 | Keyword search (Chinese tag dictionary, per-source search endpoints) | ✅ |
@@ -114,7 +125,7 @@ Two rules keep this honest:
 | Save to Pictures without overwriting | ✅ |
 | Local cache (thumbnails, current wallpaper) | ✅ |
 | Declarative JSON sources | ✅ |
-| Domestic (CN) sources | 📋 see [Roadmap](#roadmap) |
+| Domestic (CN) sources | ✅ 360 Wallpaper (the default source) |
 | Scheduled rotation | ❌ deliberately cut, see below |
 
 ### Not in v0.1.0
