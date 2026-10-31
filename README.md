@@ -269,15 +269,30 @@ directories, so a folder is created when its first real file is written, not bef
 | --- | --- | --- |
 | `v0.1.1` | **A domestic source that works without a proxy** (360 anime category), plus offset paging, combined-resolution fields and an image https upgrade | ✅ |
 | `v0.1.2` | Glass theme **follows the system light/dark setting**; new safebooru source and a content note on lolicon; then **real Acrylic** (desktop shows through), **webp/PNG/GIF wallpapers**, real 360 thumbnails, and CI | ✅ |
-| `v0.2.0` | **Desktop widget** and **user-supplied sources** — `v0.1.x` ships built-in sources only, by decision | 📋 |
-| `v0.3.0` | Desktop widget (桌面挂件) | 📋 |
+| `v0.2.0` | **User-supplied sources**: your own JSON source configs, validated when they load. `v0.1.x` ships built-in sources only, by decision | 📋 |
+| `v0.3.0` | **Desktop widget** — deliberately after the source system, see below | 📋 |
 | `v0.4.0` | Pluggable sources, if the declarative format ever stops being enough | 📋 |
-| unscheduled | CI, auto-update, UI i18n, focus trap in the detail view | 📋 |
+| unscheduled | Auto-update, UI i18n, focus trap in the detail view, code signing (see [docs/SIGNING.md](docs/SIGNING.md)) | 📋 |
 
 `v0.1.1` is the domestic source that was originally scheduled for `v0.2.0`. Without it
 the app is empty on first launch inside mainland China, which outranks any new feature.
-`v0.2.0` therefore moves to two different things: a desktop widget, and letting users
-plug in their own API without waiting for us to add a source.
+
+**Why user-supplied sources come before the widget.** The widget was going to be `v0.2.0`
+as well; it is now `v0.3.0`, on purpose:
+
+- **Content is the product.** Five built-in sources are capped by what those APIs offer
+  and by their terms. User-supplied sources turn "what can I look at" from five lists we
+  write into the user's own list. A widget adds no images.
+- **The blocker is already written down.** Letting anyone point the app at any JSON means
+  the `sfwQuery` gap stops being a code-review problem and becomes a runtime check that
+  must exist (HANDOVER §7). The widget's prerequisites — a second window that stays
+  resident, multi-monitor DPI, and its interaction with Acrylic — are not even listed yet.
+- **The format has to freeze before strangers write configs.** Today changing the source
+  schema is an internal refactor; after `v0.2.0` it is a breaking change. Getting the
+  schema right *before* the widget also means the widget's data layer comes for free.
+- **Different blast radius.** A bad user source fails alone; a resident second window can
+  drag the main one down. We just paid +14 MB of idle memory for Acrylic — a persistent
+  widget's cost has not been measured at all.
 
 No `v0.1.0` tag was ever published, so `v0.1.1` is the first genuinely usable release.
 

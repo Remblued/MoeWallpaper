@@ -17,7 +17,9 @@
   详情页（点缩略图看大图，页面上「设为壁纸」/「下载」）+ 搜索 + 翻页 + 分辨率筛选 +
   三种主题，其中玻璃主题是**真 Acrylic**（桌面透上来，亮/暗两套已用整屏截图验过）。
   壁纸格式支持 JPEG / PNG / WebP / GIF（webp 先转码成 JPEG，不依赖商店扩展）。
-- **范围（2026-10-31 定的）**：`v0.1.x` **只做内置图源**；让用户自己接图源放到 `v0.2.0`。
+- **范围（2026-10-31 定的）**：`v0.1.x` **只做内置图源**；让用户自己接图源放到 `v0.2.0`；
+  **桌面挂件挪到 `v0.3.0`**（挂件不产出内容，而且要先有稳定的图源格式——理由写在
+  README 的 Roadmap 下面）。
   所以 `sfwQuery` 强制校验、图源格式向后兼容这些"自定义图源前置条件"**不阻塞现在的发布**
 - **签名**：现在**不签**（仓库还 private），公开分发的第一个版本再签；方案与命令见
   `docs/SIGNING.md`。发布页必须写 SHA-256，这条不因为有没有签名而变
@@ -443,7 +445,7 @@ export async function fetchImages(
 |---|---|---|
 | **缓存会记住错误**：下载到一张 HTML 错误页，也会被永久当成"这张图"，不会自愈（**现在至少会报错**：`normalize` 认出"不是能识别的图片"，不会把错误页设成壁纸） | `wallpaper/download.rs` | 加「清空缓存」按钮；临时解法：删掉 `%LOCALAPPDATA%\com.remblued.moewallpaper` |
 | ~~`current.jpg` 里可能装着 PNG / WebP 数据，靠 Windows 按内容识别格式~~ | `wallpaper/current.rs` + `normalize.rs` | **已还**：落盘前统一转成 JPEG（已是 JPEG 的原样透传），解不出来就报错。见 `docs/SOURCES-CN.md` §7.3 |
-| 安全参数靠"记得配"——图源没写 `sfwQuery` 就没有任何内容限制，而这一点只有 code review 能保证 | `sources/builtin/sources.json` | 做用户自定义图源时，在加载阶段强制校验：要么配 `sfwQuery`，要么显式标记"API 本身只提供安全内容" |
+| 安全参数靠"记得配"——图源没写 `sfwQuery` 就没有任何内容限制，而这一点只有 code review 能保证 | `sources/builtin/sources.json` | **`v0.2.0` 做用户自接图源时**必须在加载阶段强制校验：要么配 `sfwQuery`，要么显式标记"API 本身只提供安全内容"。这条也是"自定义图源为什么排在挂件前面"的原因之一 |
 | 中文词表只收了约 150 个高频词，长尾词翻不了（`search/terms.json`） | `search/terms.json` | 持续加词；搜不到时 UI 已提示改用英文 |
 | 英文译名对不上目标站标签就会搜不到（映射正确 ≠ 标签存在） | `search/terms.json` | 加词时**实测一次**：拿翻出来的英文去 wallhaven 搜，看条数是不是 0 |
 | 国内免费接口几乎都是"单图 302 / 直接返回一张图"，不是列表；本项目 schema 只吃列表 | `sources/model.rs` | 要支持单图源，得加一种 source 类型（v0.4 插件化时一起做）。**2026-10-31 实测清单见 `docs/SOURCES-CN.md` §7、§9** |
