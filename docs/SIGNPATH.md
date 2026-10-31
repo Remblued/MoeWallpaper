@@ -32,11 +32,12 @@ GitHub 工作流构建"。所以我们以前那种"本机打包、手动传 Rele
 
 | 字段 | 填什么 |
 | --- | --- |
-| **Download URL** | `https://github.com/Remblued/MoeWallpaper/blob/main/DOWNLOAD.md` |
+| **Homepage URL** | `https://github.com/Remblued/MoeWallpaper`（README 就是主页；**别和 Download URL 填同一个**） |
+| **Download URL** | `https://github.com/Remblued/MoeWallpaper/blob/main/DOWNLOAD.md`（这页里写明了"代码签名由 SignPath Foundation 提供"） |
 | **Privacy Policy URL** | `https://github.com/Remblued/MoeWallpaper/blob/main/PRIVACY.md` |
 | **Wikipedia URL**（可选） | 留空 |
 | **Tagline** ⚠️ | `A 2 MB anime wallpaper app for Windows that borrows the system WebView2 instead of shipping a browser.` |
-| **Category** ⚠️ | 选最接近的「Desktop / Utilities / Desktop application」。**下拉里的选项我看不到**，按实际列表挑；别选「Developer tools」 |
+| **Category** | `Graphics`。**他们下拉里的真实选项**（2026-10-31 从 signpath.org/projects 抓到）：`Accessibility · Audio · Developer tools · Educational · Gaming · Graphics · Productivity · Science · Other`。**不要选 Accessibility**（那是读屏/辅助技术类）。这格只影响项目出现在哪个分组，不影响审核 |
 | **Description** | `MoeWallpaper is a lightweight desktop wallpaper application for Windows. It shows a grid of anime wallpapers fetched from declarative, JSON-described public image sources, and lets the user preview an image, save it, or set it as the desktop wallpaper. It is built with Tauri and the system WebView2 runtime rather than a bundled browser engine, ships no images of its own, and is written in Rust and plain TypeScript. The project publishes reproducible measurements of its size, startup time and memory use, and a SHA-256 hash for every installer it releases.` |
 | **Reputation** ⚠️ | **这是最弱的一格，必须诚实填**，见 §3.1 |
 | **Maintainer Type** ⚠️ | `Individual`（如果下拉里有 Individual developer / Independent，选它） |
