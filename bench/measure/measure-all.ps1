@@ -1,4 +1,4 @@
-# Measure MoeWallpaper cold start and idle memory.
+﻿# Measure MoeWallpaper cold start and idle memory.
 # Follows docs/BENCHMARK.md:2.3 (CreateProcess only, no ShellExecuteEx) and 2.4
 # (60 s idle, every process of the app's tree, not just the main process).
 #

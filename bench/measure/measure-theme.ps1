@@ -1,4 +1,4 @@
-# Grab one window screenshot in a chosen Windows app theme.
+﻿# Grab one window screenshot in a chosen Windows app theme.
 #
 # The glass theme follows `prefers-color-scheme`, i.e. the Windows app theme
 # (HKCU ...\Themes\Personalize\AppsUseLightTheme). This script flips that value,

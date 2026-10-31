@@ -1,6 +1,7 @@
-# Cold start, docs/BENCHMARK.md 2.3 verbatim口径:
+﻿# Cold start, docs/BENCHMARK.md 2.3 verbatim口径:
 #   - CreateProcess only (UseShellExecute = $false), never ShellExecuteEx
-#   - stopwatch from Process.Start until MainWindowHandle != 0
+#   - stopwatch from Process.Start until **the titled window** shows up
+#     (not MainWindowHandle: with a transparent window that can be a 15x15 helper)
 #   - 10 launches, report the median
 # Difference from the snippet in the doc: the poll interval is a parameter (10 ms
 # by default, same as the doc) and the wait is bounded at 30 s, so a launch that
@@ -19,6 +20,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+. (Join-Path $PSScriptRoot 'lib-window.ps1')
 $exe = (Resolve-Path -LiteralPath $ExePath).Path
 
 if (@(Get-Process -Name 'moe-wallpaper' -ErrorAction SilentlyContinue).Count -gt 0) {
@@ -34,22 +36,17 @@ $times = New-Object System.Collections.ArrayList
 for ($i = 1; $i -le $Runs; $i++) {
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $p = [System.Diagnostics.Process]::Start($psi)
-    $deadline = (Get-Date).AddSeconds(30)
-    $shown = $false
-    while ((Get-Date) -lt $deadline) {
-        if ($p.HasExited) { break }
-        $p.Refresh()
-        if ($p.MainWindowHandle -ne [IntPtr]::Zero) { $shown = $true; break }
-        Start-Sleep -Milliseconds $PollMs
-    }
+    # 等"标题窗口"出现，而不是 MainWindowHandle —— 窗口开了 transparent 之后
+    # 进程里多一个 15×15 的辅助窗，MainWindowHandle 有时指的就是它。
+    $h = Wait-AppWindow -Process $p -TimeoutSeconds 30 -PollMs $PollMs
     $sw.Stop()
-    if (-not $shown) {
-        throw ("launch {0}: no main window within 30 s (exited={1})" -f $i, $p.HasExited)
+    if ($h -eq [IntPtr]::Zero) {
+        throw ("launch {0}: 30 秒内没出现标题窗口（exited={1}）" -f $i, $p.HasExited)
     }
     [void]$times.Add([int]$sw.ElapsedMilliseconds)
     "  run {0,2}: {1,4} ms" -f $i, $sw.ElapsedMilliseconds
 
-    $p.CloseMainWindow() | Out-Null
+    [void](Close-AppWindow -Handle $h)
     [void]$p.WaitForExit(15000)
     if (-not $p.HasExited) { $p.Kill(); $p.WaitForExit() }
     $deadline = (Get-Date).AddSeconds(15)

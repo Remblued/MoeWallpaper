@@ -1,4 +1,4 @@
-# One idle sample with the window pulled to the foreground, so the screenshot that
+﻿# One idle sample with the window pulled to the foreground, so the screenshot that
 # goes with the memory record actually shows this app and not whatever was stacked
 # on top of it. CopyFromScreen copies the screen, not the window: the first
 # screenshots caught neighbouring windows, which makes them useless as evidence.

@@ -1,4 +1,4 @@
-# Second idle-memory pass: labels each process with its WebView2 role (from the
+﻿# Second idle-memory pass: labels each process with its WebView2 role (from the
 # command line) so the record can say which process owns the memory, and reports
 # private bytes + private working set (perf counter) + working set.
 #
@@ -15,6 +15,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lib-window.ps1')
 if (-not (Test-Path -LiteralPath $ExePath)) { throw "exe not found: $ExePath" }
 $exe = (Resolve-Path -LiteralPath $ExePath).Path
 
@@ -61,13 +62,8 @@ $psi.WorkingDirectory = (Split-Path -Parent $exe)
 
 foreach ($s in 1..$Samples) {
     $p = [System.Diagnostics.Process]::Start($psi)
-    $limit = (Get-Date).AddSeconds(30)
-    while ((Get-Date) -lt $limit) {
-        if ($p.HasExited) { throw "process exited during sample $s" }
-        $p.Refresh()
-        if ($p.MainWindowHandle -ne [IntPtr]::Zero) { break }
-        Start-Sleep -Milliseconds 10
-    }
+    $h = Wait-AppWindow -Process $p -TimeoutSeconds 30 -PollMs 10
+    if ($h -eq [IntPtr]::Zero) { throw "sample ${s}: 窗口没出现（exited=$($p.HasExited)）" }
     Start-Sleep -Seconds $IdleSeconds
 
     $rows = New-Object System.Collections.ArrayList
@@ -87,7 +83,7 @@ foreach ($s in 1..$Samples) {
     "  TOTAL              private={0,7:N1} MB  working set={1,7:N1} MB" -f (($rows | Measure-Object PrivateBytes -Sum).Sum / 1MB), (($rows | Measure-Object WorkingSet -Sum).Sum / 1MB)
     "  grid state         (screenshot skipped in this pass)"
 
-    $p.CloseMainWindow() | Out-Null
+    [void](Close-AppWindow -Handle $h)
     [void]$p.WaitForExit(15000)
     if (-not $p.HasExited) { $p.Kill(); $p.WaitForExit() }
     $deadline = (Get-Date).AddSeconds(15)

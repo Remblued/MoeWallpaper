@@ -1,4 +1,4 @@
-# Control run: same 60 s idle measurement, but the app cannot load any image.
+﻿# Control run: same 60 s idle measurement, but the app cannot load any image.
 
 # How: fetch.rs builds reqwest's client without an explicit proxy when the WinINET
 # system proxy is off (it is off on this machine), so reqwest falls back to the
@@ -22,6 +22,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lib-window.ps1')
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $exe = (Resolve-Path -LiteralPath $ExePath).Path
 
@@ -70,13 +71,8 @@ $psi.EnvironmentVariables['ALL_PROXY'] = 'http://127.0.0.1:1'
 
 foreach ($s in 1..$Samples) {
     $p = [System.Diagnostics.Process]::Start($psi)
-    $limit = (Get-Date).AddSeconds(30)
-    while ((Get-Date) -lt $limit) {
-        if ($p.HasExited) { throw "process exited during sample $s" }
-        $p.Refresh()
-        if ($p.MainWindowHandle -ne [IntPtr]::Zero) { break }
-        Start-Sleep -Milliseconds 10
-    }
+    $h = Wait-AppWindow -Process $p -TimeoutSeconds 30 -PollMs 10
+    if ($h -eq [IntPtr]::Zero) { throw "sample ${s}: window never appeared (exited=$($p.HasExited))" }
     Start-Sleep -Seconds $IdleSeconds
 
     $rows = New-Object System.Collections.ArrayList
@@ -102,7 +98,7 @@ foreach ($s in 1..$Samples) {
 '@
             $p.Refresh()
             $r = New-Object 'Win32.User3+RECT'
-            if ([Win32.User3]::GetWindowRect($p.MainWindowHandle, [ref]$r)) {
+            if ([Win32.User3]::GetWindowRect($h, [ref]$r)) {
                 $w = $r.Right - $r.Left; $h = $r.Bottom - $r.Top
                 $bmp = New-Object System.Drawing.Bitmap $w, $h
                 $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -115,8 +111,9 @@ foreach ($s in 1..$Samples) {
         } catch { "  screenshot skipped: $($_.Exception.Message)" }
     }
 
-    $p.CloseMainWindow() | Out-Null
+    [void](Close-AppWindow -Handle $h)
     [void]$p.WaitForExit(15000)
     if (-not $p.HasExited) { $p.Kill(); $p.WaitForExit() }
     Start-Sleep -Milliseconds 600
 }
+
