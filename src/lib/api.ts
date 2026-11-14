@@ -20,12 +20,49 @@ export interface SearchSpec {
 export interface WallpaperSource {
   id: string;
   name: string;
+  /** 后端默认 true；显式 false 表示"加载但不显示"。 */
   enabled?: boolean;
   homepage?: string | null;
   /** 内容提示（如"尺度较大"）；有值就在图源名旁标出来。 */
   contentNote?: string | null;
   /** 不配 = 该图源不支持搜索。 */
   search?: SearchSpec | null;
+  /** 来自用户配置目录（不是随程序打包的内置图源）。 */
+  custom?: boolean;
+}
+
+/**
+ * 一条加载期问题（对应后端 `validate::Problem`）。
+ *
+ * `severity: "error"` 意味着**那条图源没有被加载**，`"warning"` 是"加载了，
+ * 但多半不是你要的"。两者都必须显示出来：用户改完配置看不到效果时，
+ * 屏幕上唯一能救他的就是他面前这份逐条说明。
+ */
+export interface SourceProblem {
+  severity: "error" | "warning";
+  /** 出问题的文件：`内置图源` / `图源目录` / 具体文件名。 */
+  file: string;
+  /** 涉及哪个图源。文件级问题（语法、版本号）为 null。 */
+  sourceId: string | null;
+  message: string;
+}
+
+/** `list_sources` 的返回（对应后端 SourcesResult）。 */
+export interface SourcesResult {
+  /** 内置在前，用户文件按文件名排在后面。 */
+  sources: WallpaperSource[];
+  problems: SourceProblem[];
+  /** 用户图源配置目录的绝对路径。 */
+  folder: string;
+  /** 目录里有几个 .json（坏文件也算）。 */
+  userFiles: number;
+}
+
+/** `import_source_file` 的返回（对应后端 ImportOutcome）。 */
+export interface ImportOutcome {
+  /** 写进目录后的文件名；null = 校验没通过，什么都没写。 */
+  written: string | null;
+  problems: SourceProblem[];
 }
 
 /** 与后端 ImageDto 序列化结果对应（camelCase）。 */
@@ -51,9 +88,27 @@ export interface FetchResult {
   notice: string | null;
 }
 
-/** 返回内置图源列表。 */
-export async function listSources(): Promise<WallpaperSource[]> {
-  return invoke<WallpaperSource[]>("list_sources");
+/** 返回内置图源 + 用户图源，附带加载期的问题。 */
+export async function listSources(): Promise<SourcesResult> {
+  return invoke<SourcesResult>("list_sources");
+}
+
+/** 在资源管理器里打开用户图源目录。 */
+export async function openSourcesDir(): Promise<string> {
+  return invoke<string>("open_sources_dir");
+}
+
+/** 生成示例配置（已存在则不覆盖）。返回一句能直接显示的话。 */
+export async function createExampleSource(): Promise<string> {
+  return invoke<string>("create_example_source");
+}
+
+/** 导入一份配置：后端先校验，通过了才写盘。 */
+export async function importSourceFile(
+  fileName: string,
+  content: string,
+): Promise<ImportOutcome> {
+  return invoke<ImportOutcome>("import_source_file", { fileName, content });
 }
 
 /** 从指定图源拉一页图片。page 从 1 开始。query 不传 = 浏览，传了 = 搜索。 */

@@ -5,8 +5,22 @@
  * 三种状态（加载中 / 空 / 出错）都有可见文案，不会白屏。
  */
 
-import { listSources, fetchImages, setWallpaper, saveImage } from "./lib/api";
-import type { FetchResult, ImageDto, WallpaperSource } from "./lib/api";
+import {
+  listSources,
+  fetchImages,
+  setWallpaper,
+  saveImage,
+  openSourcesDir,
+  createExampleSource,
+  importSourceFile,
+} from "./lib/api";
+import type {
+  FetchResult,
+  ImageDto,
+  SourceProblem,
+  SourcesResult,
+  WallpaperSource,
+} from "./lib/api";
 import {
   gridEntries,
   parseRatio,
@@ -14,6 +28,7 @@ import {
   NO_FILTER,
 } from "./lib/filters";
 import type { FilterState } from "./lib/filters";
+import { groupSources, pickSourceId, sourceLabel } from "./lib/source-groups";
 import { USE_MOCK, mockImages, mockDelay } from "./lib/mock";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
@@ -31,15 +46,42 @@ const ratioSelect  = document.getElementById("ratio-select") as HTMLSelectElemen
 const themeBtn     = document.getElementById("theme-toggle") as HTMLButtonElement;
 const sourceNoteEl = document.getElementById("source-note") as HTMLParagraphElement;
 
+// 图源管理面板
+const sourcesBtn       = document.getElementById("sources-btn") as HTMLButtonElement;
+const sourcesOverlay   = document.getElementById("sources-overlay") as HTMLDivElement;
+const sourcesFolderEl  = document.getElementById("sources-folder") as HTMLElement;
+const sourcesSummaryEl = document.getElementById("sources-summary") as HTMLParagraphElement;
+const sourcesProblemsEl = document.getElementById("sources-problems") as HTMLUListElement;
+const sourcesDocEl     = document.getElementById("sources-doc") as HTMLAnchorElement;
+const sourcesOpenBtn   = document.getElementById("sources-open") as HTMLButtonElement;
+const sourcesReloadBtn = document.getElementById("sources-reload") as HTMLButtonElement;
+const sourcesImportBtn = document.getElementById("sources-import") as HTMLButtonElement;
+const sourcesExampleBtn = document.getElementById("sources-example") as HTMLButtonElement;
+const sourcesFileInput = document.getElementById("sources-file") as HTMLInputElement;
+
+
 // ── 状态 ────────────────────────────────────────────────────
 let currentSourceId = "";
 let currentQuery = "";               // 当前搜索词，空串 = 浏览模式
 let loadSeq = 0;                     // 请求序号，过期响应直接丢弃
 let lastImages: ImageDto[] = [];     // 最近一次拉到的**完整**一页，供点击处理器按下标取图
 let lastNotice: string | null = null;// 后端"为了让结果不为空做了什么"的提示
-let allSources: WallpaperSource[] = []; // 缓存图源列表，用于判断 search 能力
+let allSources: WallpaperSource[] = []; // 缓存**可显示**的图源列表，用于判断 search 能力
 let currentPage = 1;                 // 当前页码，从 1 开始
 let hasMorePages = false;            // 上一页拿满了才认为有下一页
+
+/** 最近一次 `list_sources` 的完整结果（含加载期问题、配置目录）。 */
+let sourceState: SourcesResult | null = null;
+
+/**
+ * 导入失败时那一批问题。
+ *
+ * 为什么不直接塞进 `sourceState.problems`：那些是**已经加载的配置**身上的问题，
+ * 而这里是"你刚想导入、但没通过校验"的那份文件的问题。混在一起会让人以为
+ * 目录里已经有这个坏文件了。
+ */
+let importProblems: SourceProblem[] = [];
+
 
 /** 当前筛选条件。规则在 `lib/filters.ts`，那边有测试。 */
 let filter: FilterState = { ...NO_FILTER };
@@ -552,34 +594,14 @@ async function init() {
   // 初始化详情页覆盖层
   initDetailOverlay();
 
+  // 图源管理面板（事件只绑一次）
+  initSourcesPanel();
+
   try {
-    let sources: WallpaperSource[];
-
-    if (USE_MOCK) {
-      sources = [
-        { id: "mock-1", name: "Mock 图源 A", enabled: true },
-        { id: "mock-2", name: "Mock 图源 B", enabled: true },
-      ];
-    } else {
-      sources = await listSources();
-    }
-
-    // Fix-1: 过滤掉 enabled: false 的图源
-    sources = sources.filter((s) => s.enabled !== false);
-    allSources = sources;
-
-    // 填充下拉框（escape 防注入）。
-    // 有 contentNote 的图源在名字后面标出来——用户在选之前就该知道。
-    sourceSelect.innerHTML = sources
-      .map((s) => {
-        const label = s.contentNote ? `${s.name}（${s.contentNote}）` : s.name;
-        return `<option value="${esc(s.id)}">${esc(label)}</option>`;
-      })
-      .join("");
-    sourceSelect.disabled = false;
+    await refreshSourceList();
 
     // 选第一个可用图源
-    currentSourceId = sources[0]?.id ?? "";
+    currentSourceId = pickSourceId(allSources, "");
     sourceSelect.value = currentSourceId;
 
     // 切换图源
@@ -628,11 +650,269 @@ async function init() {
     if (currentSourceId) {
       loadImages(currentSourceId);
     } else {
-      renderEmpty();
+      renderNoSources();
     }
   } catch (err) {
     renderError(err);
   }
 }
 
+// ── 图源管理（v0.2.0：接入自己的 API） ──────────────────────
+
+/** 一行 option。内容提示跟在名字后面，自定义图源靠 optgroup 区分。 */
+function sourceOption(source: WallpaperSource): string {
+  return `<option value="${esc(source.id)}">${esc(sourceLabel(source))}</option>`;
+}
+
+/**
+ * 把后端返回的图源清单贴到界面：下拉框、目录路径、摘要、问题列表。
+ *
+ * 只动界面，不联网、不改选中项——选中项由调用方决定（见 `pickSourceId`）。
+ */
+function applySources(result: SourcesResult) {
+  sourceState = result;
+
+  const groups = groupSources(result.sources);
+  allSources = groups.flatMap((group) => group.sources);
+
+  // 只有一组时不画 optgroup：一个"内置图源"的标题下面全是图源，纯属多一层。
+  sourceSelect.innerHTML =
+    groups.length > 1
+      ? groups
+          .map(
+            (group) =>
+              `<optgroup label="${esc(group.label)}">${group.sources
+                .map(sourceOption)
+                .join("")}</optgroup>`,
+          )
+          .join("")
+      : groups.flatMap((group) => group.sources.map(sourceOption)).join("");
+
+  sourceSelect.disabled = allSources.length === 0;
+
+  renderSourcesPanel();
+}
+
+/** 面板里的路径、摘要、问题列表，以及按钮上的小圆点。 */
+function renderSourcesPanel() {
+  const state = sourceState;
+  if (!state) return;
+
+  sourcesFolderEl.textContent = state.folder || "（找不到 APPDATA，加载不了用户配置）";
+
+  const builtin = state.sources.filter((s) => s.custom !== true).length;
+  const customAll = state.sources.filter((s) => s.custom === true).length;
+  const customHidden = state.sources.filter(
+    (s) => s.custom === true && s.enabled === false,
+  ).length;
+
+  let summary = `内置图源 ${builtin} 个`;
+  summary += customAll > 0 ? ` · 自定义 ${customAll} 个` : " · 还没有自定义图源";
+  if (customHidden > 0) {
+    summary += `（其中 ${customHidden} 个写了 enabled:false，下拉框里不显示）`;
+  }
+  summary += ` · 目录里 ${state.userFiles} 个 .json 文件`;
+  sourcesSummaryEl.textContent = summary;
+
+  // 错误排在前面：屏幕上第一眼要看到的是"为什么我的图源没出现"。
+  const problems = [...importProblems, ...state.problems].sort((a, b) =>
+    a.severity === b.severity ? 0 : a.severity === "error" ? -1 : 1,
+  );
+
+  if (problems.length === 0) {
+    sourcesProblemsEl.innerHTML = `<li class="panel-problem panel-problem--ok">配置都正常。</li>`;
+  } else {
+    sourcesProblemsEl.innerHTML = problems
+      .map((p) => {
+        const where = p.sourceId ? `${p.file} · ${p.sourceId}` : p.file;
+        return `<li class="panel-problem panel-problem--${p.severity}">
+          <span class="panel-problem__where">${esc(where)}</span>
+          <span class="panel-problem__message">${esc(p.message)}</span>
+        </li>`;
+      })
+      .join("");
+  }
+
+  // 有问题就不能只藏在面板里：用户没有理由点开一个看不出异常的按钮。
+  const errors = problems.filter((p) => p.severity === "error").length;
+  sourcesBtn.classList.toggle("icon-btn--warn", errors > 0);
+  sourcesBtn.title =
+    errors > 0 ? `图源管理：有 ${errors} 个问题，点开看` : "图源管理（接入自己的 API）";
+  sourcesBtn.setAttribute(
+    "aria-label",
+    errors > 0 ? `图源管理，有 ${errors} 个问题` : "图源管理",
+  );
+}
+
+/**
+ * 重新读配置并更新界面，**不碰网络**。
+ *
+ * 返回选中项有没有变：变了的话调用方得重拉图片，不变就别白打一次请求
+ * （用户导入一个图源时，正在看的那一页没必要刷新）。
+ */
+async function refreshSourceList(): Promise<{ next: string; changed: boolean }> {
+  const previous = currentSourceId;
+  const result = USE_MOCK ? mockSourceState() : await listSources();
+
+  applySources(result);
+
+  const next = pickSourceId(allSources, previous);
+  const changed = next !== previous;
+  currentSourceId = next;
+  sourceSelect.value = next;
+
+  // 磁盘都重读过了，上一次"导入失败"的抱怨就过期了——但它只在这一个函数里清，
+  // 因为导入失败的那条路径**不会**走到这里（它就是要让红字留在屏幕上）。
+  importProblems = [];
+
+  if (changed) {
+    syncSourceUi(); // 切图源要清空搜索框、同步"能不能搜"
+  }
+
+  return { next, changed };
+}
+
+/** "手动重新加载"：重读配置 + 重拉当前页。 */
+async function reloadSources() {
+  const { next, changed } = await refreshSourceList();
+
+  if (!next) {
+    renderNoSources();
+    return;
+  }
+  await loadImages(next, changed ? undefined : currentQuery || undefined);
+}
+
+function setSourcesPanelOpen(open: boolean) {
+  sourcesOverlay.hidden = !open;
+  if (open) renderSourcesPanel();
+}
+
+/** 一个可用图源都没有时的空态：指向「图源」面板，而不是干瞪眼。 */
+function renderNoSources() {
+  lastImages = [];
+  statusEl.textContent = "没有可用的图源——点右上角 🧩 看看有没有报错";
+  statusEl.className = "status status--empty";
+  gridEl.innerHTML = "";
+}
+
+function mockSourceState(): SourcesResult {
+  return {
+    sources: [
+      { id: "mock-1", name: "Mock 图源 A", enabled: true },
+      { id: "mock-2", name: "Mock 图源 B", enabled: true },
+    ],
+    problems: [],
+    folder: "C:\\Users\\Mock\\AppData\\Roaming\\com.remblued.moewallpaper\\sources",
+    userFiles: 0,
+  };
+}
+
+function initSourcesPanel() {
+  // `hidden` 在 TS 里是 `boolean | "until-found"`，所以要显式比一次
+  sourcesBtn.onclick = () => setSourcesPanelOpen(sourcesOverlay.hidden !== false);
+
+  // 遮罩和右上角的 × 都带 data-action="close-sources"
+  sourcesOverlay.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).dataset.action === "close-sources") {
+      setSourcesPanelOpen(false);
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !sourcesOverlay.hidden) setSourcesPanelOpen(false);
+  });
+
+  // 文档链接要交给系统浏览器：WebView 里 target=_blank 不会打开新窗口
+  sourcesDocEl.addEventListener("click", (e) => {
+    e.preventDefault();
+    openUrl(sourcesDocEl.href).catch((err: unknown) => {
+      showToast(`❌ 打不开浏览器：${String(err)}`, true);
+    });
+  });
+
+  sourcesOpenBtn.onclick = async () => {
+    try {
+      await openSourcesDir();
+    } catch (err) {
+      showToast(`❌ 打不开文件夹：${String(err)}`, true);
+    }
+  };
+
+  sourcesReloadBtn.onclick = async () => {
+    sourcesReloadBtn.disabled = true;
+    try {
+      await reloadSources();
+      showToast("已重新加载图源");
+    } catch (err) {
+      showToast(`❌ 重新加载失败：${String(err)}`, true);
+    } finally {
+      sourcesReloadBtn.disabled = false;
+    }
+  };
+
+  sourcesExampleBtn.onclick = async () => {
+    try {
+      const message = await createExampleSource();
+      showToast(`✅ ${message}`);
+      await refreshSourceList();
+    } catch (err) {
+      showToast(`❌ 生成示例失败：${String(err)}`, true);
+    }
+  };
+
+  sourcesImportBtn.onclick = () => sourcesFileInput.click();
+
+  sourcesFileInput.onchange = async () => {
+    const file = sourcesFileInput.files?.[0];
+    if (!file) return;
+
+    try {
+      const buffer = await file.arrayBuffer();
+
+      // 自己解 UTF-8 而不是 `file.text()`：后者会把 GBK 静默解成一串乱码，
+      // 然后后端报"JSON 语法错误"——那句错误指向的地方根本不是问题所在。
+      let text: string;
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+      } catch {
+        importProblems = [
+          {
+            severity: "error",
+            file: file.name,
+            sourceId: null,
+            message:
+              "这个文件不是 UTF-8 编码。记事本里的「ANSI」就是 GBK，另存为 UTF-8 再导入",
+          },
+        ];
+        renderSourcesPanel();
+        showToast("❌ 导入失败：文件不是 UTF-8 编码", true);
+        return;
+      }
+
+      const outcome = await importSourceFile(file.name, text);
+
+      if (outcome.written) {
+        // 写盘成功了就不留着这一批问题：重新加载之后，同一个文件的警告会由
+        // `sourceState.problems` 原样带回来，留着就会在面板里显示两遍。
+        importProblems = [];
+        showToast(`✅ 已导入 ${outcome.written}`);
+        const { changed } = await refreshSourceList();
+        if (changed && currentSourceId) await loadImages(currentSourceId);
+      } else {
+        importProblems = outcome.problems;
+        renderSourcesPanel();
+        const errors = outcome.problems.filter((p) => p.severity === "error").length;
+        showToast(`❌ 没通过校验（${errors} 个错误），什么都没写——面板里有原因`, true);
+      }
+    } catch (err) {
+      showToast(`❌ 导入失败：${String(err)}`, true);
+    } finally {
+      // 清空之后同一个文件才能再选一次（不清的话 change 不会触发）
+      sourcesFileInput.value = "";
+    }
+  };
+}
+
 window.addEventListener("DOMContentLoaded", init);
+

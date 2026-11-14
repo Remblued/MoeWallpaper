@@ -13,7 +13,10 @@
 > block it. **Verify the SHA-256 published on the release page instead.** Details:
 > [DOWNLOAD.md](DOWNLOAD.md) · [docs/SIGNING.md](docs/SIGNING.md).
 
-> **Status: `v0.1.3`.** ✅ done · 🚧 in progress · 📋 planned. Only the [Roadmap](#roadmap) describes what actually ships.
+> **Status: `v0.2.0` in progress.** `v0.1.3` is the current release; the `v0.2.0` work
+> (custom sources) is on `main` and **not released yet** — the four numbers get re-measured
+> before it ships. ✅ done · 🚧 in progress · 📋 planned. Only the
+> [Roadmap](#roadmap) describes what actually ships.
 
 ## The idea
 
@@ -152,11 +155,13 @@ Two rules keep this honest:
 - If a measurement contradicts a claim, **the claim changes**. The numbers are the
   product; the marketing line is not.
 
-## Features (v0.1.3)
+## Features (`v0.1.3` release + `v0.2.0` on main)
 
 | Feature | Status |
 | --- | --- |
 | Fetch from declarative JSON sources (360 / safebooru / wallhaven / nekos.best / lolicon) | ✅ |
+| **Bring your own API**: drop one JSON file into the config folder and it becomes a source | 🚧 on main, `v0.2.0` unreleased |
+| Source manager: folder path, reload, import .json, generate example, per-file errors | 🚧 on main, `v0.2.0` unreleased |
 | Thumbnail grid with skeleton and broken-image fallback | ✅ |
 | Detail view: full image, set as wallpaper, download, open source page | ✅ |
 | Keyword search (Chinese tag dictionary, per-source search endpoints) | ✅ |
@@ -173,8 +178,10 @@ Two rules keep this honest:
 | CI (fmt / clippy / test / tsc / vite / node:test on GitHub Actions) | ✅ |
 | Scheduled rotation | ❌ deliberately cut, see below |
 
-> That table is exactly what ships as `v0.1.3`, including the three bug fixes and the
-> shape filter. What those three were, and why testing missed them, is in the
+> The two `v0.2.0` rows are **on `main` only**: the published installer is still `v0.1.3`
+> and has no source manager. The full field reference, validation rules and troubleshooting
+> are in [docs/CUSTOM-SOURCES.md](docs/CUSTOM-SOURCES.md) (Chinese).
+> What the three `v0.1.3` bug fixes were, and why testing missed them, is in the
 > [handover](docs/HANDOVER.md) §1.
 
 ### Not in v0.1.0
@@ -192,36 +199,52 @@ A source is a JSON object describing **how to ask** and **how to read the answer
 
 ```json
 {
-  "id": "example",
-  "name": "Example source (template)",
-  "enabled": false,
-  "request": {
-    "url": "https://example.invalid/api/posts?limit={limit}&page={page}",
-    "headers": { "Accept": "application/json" }
-  },
-  "response": {
-    "itemsPath": "data",
-    "imageUrl": "file_url",
-    "thumbnailUrl": "sample_url",
-    "tags": "tags"
-  },
-  "filter": { "sfwOnly": true }
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "example",
+      "name": "Example source",
+      "request": {
+        "url": "https://example.invalid/api/posts?limit={limit}&page={page}",
+        "headers": { "Accept": "application/json" }
+      },
+      "response": {
+        "itemsPath": "data",
+        "imageUrl": "file_url",
+        "thumbnailUrl": "sample_url",
+        "width": "w",
+        "height": "h"
+      },
+      "filter": { "sfwQuery": "purity=100" }
+    }
+  ]
 }
 ```
 
 - Built-in definitions live in [`sources/builtin/`](sources/builtin/); the contract is
   typed in [`src/lib/sources/schema.ts`](src/lib/sources/schema.ts).
-- `{limit}` and `{page}` are the only placeholders the app substitutes.
-- **SFW by default.** A source only returns content it can mark as safe unless the user
-  explicitly opts out; the default is never "off".
+- Placeholders: `{page}`, `{pageIndex}` (page − 1), `{offset}` (`(page-1)×limit`),
+  `{limit}`, and `{query}` — which only works inside `search.url`.
+- **Content safety is mandatory.** `filter` must carry either `sfwQuery` (a rating
+  parameter) or an explicit `sfwSafeEndpoint: true` (the endpoint only serves safe
+  content). A source with neither is rejected at load time. The evidence for each of the
+  five built-in sources is written down in [SOURCES-CN §11](docs/SOURCES-CN.md).
 - Source definitions never contain API keys. A source that needs one is out of scope
   for the built-in list.
+
+**Your own sources** (`v0.2.0`): put the same JSON into
+`%APPDATA%\com.remblued.moewallpaper\sources\`, then 🧩 → "重新加载" (reload).
+A config that fails validation loads nothing, but every problem is reported with the
+file, the field and what to change. Full reference: [docs/CUSTOM-SOURCES.md](docs/CUSTOM-SOURCES.md).
 
 ## Where your data goes
 
 - No account, no telemetry, no analytics.
-- Thumbnails and the current wallpaper are cached under the app's local data
-  directory (`%LOCALAPPDATA%\<app identifier>\`), never in this repository.
+- Thumbnails and the current wallpaper are cached under the app's local data directory
+  (`%LOCALAPPDATA%\com.remblued.moewallpaper\`), never in this repository.
+- Your own source configs live under `%APPDATA%\com.remblued.moewallpaper\sources\` —
+  deliberately **not** inside the cache, because the cache can be cleared at any time
+  and the configs must not go with it.
 - Clearing the cache is a normal app action, not a reinstall.
 
 ## Build from source
@@ -248,27 +271,41 @@ does **not** produce an app.
 ```text
 .
 ├─ src/                         # frontend (vanilla TypeScript, built by Vite)
-│  ├─ main.ts                   # entry point: mounts the UI
-│  ├─ lib/                      # framework-free logic, unit-testable
-│  │  └─ sources/schema.ts      # the JSON source contract
-│  ├─ ui/                       # 📋 DOM rendering and event wiring
-│  └─ assets/                   # static assets shipped with the frontend
-├─ sources/builtin/             # shipped source definitions (JSON only, no images)
+│  ├─ main.ts                   # entry point: UI, events, source manager
+│  ├─ styles.css
+│  └─ lib/                      # framework-free logic, unit-tested
+│     ├─ api.ts                 # the only file that calls invoke(
+│     ├─ filters.ts             # resolution / shape filters
+│     ├─ source-groups.ts       # grouping and post-reload selection
+│     └─ sources/schema.ts      # the JSON source contract
+├─ tests/                       # frontend logic tests (node --test, no deps)
+├─ sources/
+│  ├─ builtin/sources.json      # the 5 shipped sources (JSON only, no images)
+│  └─ examples/                 # template used by "generate example config"
+├─ search/terms.json            # Chinese → English tag dictionary
 ├─ src-tauri/                   # Rust side
 │  ├─ src/main.rs               # process entry, calls the library
 │  ├─ src/lib.rs                # app setup, Tauri builder
-│  ├─ src/commands/             # 📋 #[tauri::command] surface exposed to the frontend
-│  ├─ src/sources/              # 📋 load and fetch sources
-│  ├─ src/wallpaper/            # 📋 set and cache wallpapers
+│  ├─ src/commands/mod.rs       # the 7 commands exposed to the frontend
+│  ├─ src/sources/
+│  │  ├─ model.rs               # source format (changing this = changing the format)
+│  │  ├─ loader.rs              # built-in + user dir merge, file I/O
+│  │  ├─ validate.rs            # load-time validation: errors drop a source
+│  │  ├─ fetch.rs               # request building, placeholders, random paging
+│  │  ├─ extract.rs             # response → image list
+│  │  └─ search.rs              # keyword → the tag shape each site expects
+│  ├─ src/wallpaper/            # set and cache wallpapers
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
-├─ docs/BENCHMARK.md            # how the size and speed numbers are produced
+├─ bench/measure/               # the scripts that produce the four numbers
+├─ docs/
+│  ├─ CUSTOM-SOURCES.md         # custom sources: fields, validation, troubleshooting
+│  ├─ BENCHMARK.md              # how the size and speed numbers are produced
+│  ├─ SOURCES-CN.md             # source measurements and the acceptance checklist
+│  └─ HANDOVER.md               # status, conventions, technical debt
 ├─ LICENSE
 └─ README.md · README.zh-CN.md
 ```
-
-Directories marked 📋 do not exist yet on purpose: git does not track empty
-directories, so a folder is created when its first real file is written, not before.
 
 ## Roadmap
 
@@ -277,7 +314,7 @@ directories, so a folder is created when its first real file is written, not bef
 | `v0.1.1` | **A domestic source that works without a proxy** (360 anime category), plus offset paging, combined-resolution fields and an image https upgrade | ✅ |
 | `v0.1.2` | Glass theme **follows the system light/dark setting**; new safebooru source and a content note on lolicon; then **real Acrylic** (desktop shows through), **webp/PNG/GIF wallpapers**, real 360 thumbnails, and CI | ✅ |
 | `v0.1.3` | Three real bugs fixed: **a thumbnail opened its neighbour**, **search was eaten by a random page index**, and **English aliases in the tag dictionary never applied**; new **shape filter** (monitor / tablet / phone); frontend gets its first unit tests | ✅ |
-| `v0.2.0` | **User-supplied sources**: your own JSON source configs, validated when they load. `v0.1.x` ships built-in sources only, by decision | 📋 |
+| `v0.2.0` | **User-supplied sources**: your own JSON source configs, validated when they load (content-safety declaration, placeholders, ids, unknown fields), plus a source manager panel. Code is on `main` | 🚧 unreleased |
 | `v0.3.0` | **Desktop widget** — deliberately after the source system, see below | 📋 |
 | `v0.4.0` | Pluggable sources, if the declarative format ever stops being enough | 📋 |
 | unscheduled | Auto-update, UI i18n, focus trap in the detail view, code signing (see [docs/SIGNING.md](docs/SIGNING.md)) | 📋 |
@@ -285,16 +322,16 @@ directories, so a folder is created when its first real file is written, not bef
 `v0.1.1` is the domestic source that was originally scheduled for `v0.2.0`. Without it
 the app is empty on first launch inside mainland China, which outranks any new feature.
 
-**Why user-supplied sources come before the widget.** The widget was going to be `v0.2.0`
-as well; it is now `v0.3.0`, on purpose:
+**Why user-supplied sources were put before the widget** (it has since landed; this
+still explains the order):
 
 - **Content is the product.** Five built-in sources are capped by what those APIs offer
   and by their terms. User-supplied sources turn "what can I look at" from five lists we
   write into the user's own list. A widget adds no images.
-- **The blocker is already written down.** Letting anyone point the app at any JSON means
-  the `sfwQuery` gap stops being a code-review problem and becomes a runtime check that
-  must exist (HANDOVER §7). The widget's prerequisites — a second window that stays
-  resident, multi-monitor DPI, and its interaction with Acrylic — are not even listed yet.
+- **The blocker was already written down.** Letting anyone point the app at any JSON means
+  the `sfwQuery` gap stops being a code-review problem and becomes a runtime check. That
+  debt is now paid: a source with neither `sfwQuery` nor `sfwSafeEndpoint` is not loaded,
+  and the five built-ins have to pass the same gate.
 - **The format has to freeze before strangers write configs.** Today changing the source
   schema is an internal refactor; after `v0.2.0` it is a breaking change. Getting the
   schema right *before* the widget also means the widget's data layer comes for free.

@@ -2,7 +2,7 @@
 
 > 给新加入的合作者。读完这份文档，你应该能在 15 分钟内跑起项目，并知道下一步该做什么、什么不能做。
 >
-> 最后更新：2026-10-29 · 分支 `main`。
+> 最后更新：2026-11-14 · 分支 `main`。
 > **具体状态以 `git log -1` 为准，本文不追提交号**——写死在文档里的哈希一定会过期，然后误导下一个读它的人。
 
 ---
@@ -15,12 +15,16 @@
   这种模糊说法）；图源用 JSON 声明、不做插件运行时；不内置任何图片。
 - **现在**：能联网拉图、能下载缓存、能一键换桌面壁纸；界面有图源下拉 + 缩略图网格 +
   详情页（点缩略图看大图，页面上「设为壁纸」/「下载」）+ 搜索 + 翻页 + 分辨率筛选 +
-  三种主题，其中玻璃主题是**真 Acrylic**（桌面透上来，亮/暗两套已用整屏截图验过）。
+  比例筛选 + 图源管理面板，三种主题，其中玻璃主题是**真 Acrylic**（桌面透上来，
+  亮/暗两套已用整屏截图验过）。
   壁纸格式支持 JPEG / PNG / WebP / GIF（webp 先转码成 JPEG，不依赖商店扩展）。
+- **现在（2026-11-14）**：`v0.2.0` 的**自定义图源**已经落在 main 上（加载期校验 +
+  用户配置目录 + 图源管理面板），**代码和文档就绪、尚未发版**——发版要重测四个数字。
+  结构说明在 `docs/CUSTOM-SOURCES.md`，实现落点在 `src-tauri/src/sources/validate.rs`
+  + `loader.rs`。下一步是 `v0.3.0` 的桌面挂件（前提见 README Roadmap）。
 - **范围（2026-10-31 定的）**：`v0.1.x` **只做内置图源**；让用户自己接图源放到 `v0.2.0`；
   **桌面挂件挪到 `v0.3.0`**（挂件不产出内容，而且要先有稳定的图源格式——理由写在
-  README 的 Roadmap 下面）。
-  所以 `sfwQuery` 强制校验、图源格式向后兼容这些"自定义图源前置条件"**不阻塞现在的发布**
+  README 的 Roadmap 下面）。`sfwQuery` 强制校验那条前置条件**已经还了**（见 §7）。
 - **签名**：现在**不签**（仓库已于 2026-10-31 转 public，但签名只对公开分发有意义，
   而公开分发的第一个版本还没发）。方案与命令见 `docs/SIGNING.md`。发布页必须写
   SHA-256，这条不因为有没有签名而变
@@ -65,11 +69,32 @@
 | **前缀兜底** | 精确标签 0 条时补 `*` 再试一次，并把"这是放宽过的结果"带回前端 | `SearchSpec::wildcard_fallback` + `FetchResult.notice` |
 | **比例筛选** | 显示器（≥1.6）/ 平板（1.15~1.6 或 0.62~0.87）/ 手机（<0.62）。区间刻意留缝 | `src/lib/filters.ts` |
 | **前端纯逻辑测试** | `gridEntries` 的下标、比例分档、未知尺寸。零依赖，`node --test` 直接跑 .ts | `tests/filters.test.ts` |
+| **图源校验（v0.2.0）** | 加载期校验：id 形态、占位符、`{query}` 位置、GET、安全声明、未知字段（带"是不是想写 X"提示）、`schemaVersion` | `src-tauri/src/sources/validate.rs` |
+| **用户图源（v0.2.0）** | `%APPDATA%\...\sources\*.json` 与内置合并；坏文件不影响别的文件；id 撞了后加载的那条被跳过并报错；BOM/GBK 各有明确提示 | `src-tauri/src/sources/loader.rs` |
+| **图源管理面板（v0.2.0）** | 目录路径、打开文件夹、重新加载、导入 .json（先校验后写盘）、生成示例、逐条问题列表、按钮红点 | `index.html` + `src/main.ts` |
+| **示例模板即配置** | `sources/examples/example.sources.json` 同时被 `include_str!` 进 exe（「生成示例配置」）和一条测试校验"零问题" | 同上 |
 | 前端 | 图源下拉、缩略图网格、四态、toast、两个筛选下拉 | `src/main.ts` + `src/lib/api.ts` + `src/lib/mock.ts` |
 | **CI** | GitHub Actions：Rust（fmt/clippy/test）+ 前端（tsc / test:web / vite），见 §2.5 | `.github/workflows/ci.yml` |
 
-**测试：111 个 Rust（103 个自动跑 + 8 个标记 `#[ignore]` 手动跑——它们会真的改桌面或真的联网）
-\+ 9 个前端纯逻辑测试（`npm run test:web`）。`cargo clippy -D warnings` 零告警。**
+**测试：148 个 Rust（138 个自动跑 + 10 个标记 `#[ignore]` 手动跑——它们会真的改桌面或
+真的联网）+ 19 个前端纯逻辑测试（`npm run test:web`）。`cargo clippy -D warnings` 零告警。**
+
+### 2026-11-14：自定义图源（v0.2.0）的六个决定
+
+这一版加的是"让陌生人写配置"。所以真正的工作量不在功能，在**用户写错时会发生什么**。
+
+| # | 决定 | 为什么不是另一种做法 |
+|---|---|---|
+| 1 | 配置放 `%APPDATA%\...\sources\`，**不放在缓存目录里** | 缓存是随时可清的，配置是用户自己写的。共用一个根目录，将来一次「清空缓存」就把人家的东西删了 |
+| 2 | 校验分**错误**（丢这条图源）和**警告**（照常加载） | 全都当错误 = 少写一个 `height` 就整个图源消失；全都当警告 = 安全声明没了也没人知道 |
+| 3 | 一个文件里坏一条，**同文件的其他条照常加载**；坏文件不影响别的文件 | 整份作废最"简单"，但用户手上有 3 个图源、只有 1 个写坏时，他什么也测不了 |
+| 4 | `sfwQuery` / `sfwSafeEndpoint` **二选一是硬校验**，内置 5 个也必须过 | 这是 §7 里那笔债。以前靠 code review，现在配置是用户写的，没人 review 了 |
+| 5 | 未知字段只**警告**，并且提示"是不是想写 `sfwQuery`？" | 加 `deny_unknown_fields` 会让"多留一个 `_comment`"就整份报销，太脆。而拼错的代价是**静默失效**，所以必须提示 |
+| 6 | 导入 = **先校验再写盘** | 反过来会让目录里堆坏文件，用户刚点完导入就看到满屏红字，以为是自己弄坏了什么 |
+
+实现落点：`sources/validate.rs`（纯校验，可单测）、`sources/loader.rs`（读盘 + 合并）、
+`commands/mod.rs`（三个新命令）；前端 `src/lib/source-groups.ts`（分组与重选，可单测）
++ `main.ts` 的面板部分。字段表与排错写成用户文档 `docs/CUSTOM-SOURCES.md`。
 
 ### 2026-11-02：一次用户反馈牵出的三个真 bug
 
@@ -101,6 +126,10 @@
 - ✅ 比例筛选（显示器 / 平板 / 手机）：客户端筛，和分辨率档位可以叠加。
   **已知局限**：360 基本全是横图、safebooru 的浏览模板带 `width:>=1920`，所以"手机"档
   在那两个源上常常是空的；竖图最稳的来源是 lolicon。见债表
+- ✅ **自定义图源（v0.2.0，代码在 main、未发版）**：用户把 JSON 放进
+  `%APPDATA%\com.remblued.moewallpaper\sources\`，加载时校验（内容安全声明、占位符、
+  id、未知字段），面板里逐条报错。文档 `docs/CUSTOM-SOURCES.md`。
+  **发版前必须重测那四个数字**（安装包会大一点点）
 - ✅ 发布：`v0.1.2` tag（2026-10-31）+ **`v0.1.3` tag**（同日，三个 bug 修复 + 比例筛选），
   各带一个 NSIS 安装包
   https://github.com/Remblued/MoeWallpaper/releases
@@ -293,10 +322,12 @@ Meowallpaper/
 
 **这是最重要的部分。** 前端和后端各自按这张表写，不用等对方。
 
-### 已实现（四个命令，前端都接得上）
+### 已实现（七个命令，前端都接得上）
 
 ```rust
-list_sources() -> Result<Vec<WallpaperSource>, String>
+// 内置图源 + 用户配置目录里的图源，附带加载期问题
+list_sources() -> Result<SourcesResult, String>
+// { sources: Vec<WallpaperSource>, problems: Vec<Problem>, folder: String, userFiles: usize }
 
 // 拉一页图。page 从 1 开始。query 不传 = 浏览，传了 = 搜索
 fetch_images(source_id: String, page: u32, query: Option<String>)
@@ -307,7 +338,27 @@ set_wallpaper(image_url: String) -> Result<(), String>
 
 // 下载 → 缓存 → 存到用户的「图片」目录，返回绝对路径
 save_image(image_url: String) -> Result<String, String>
+
+// v0.2.0：在资源管理器里打开用户图源目录，返回那个路径
+open_sources_dir() -> Result<String, String>          // 需要 AppHandle
+
+// v0.2.0：写出示例配置（已存在不覆盖），返回一句能直接显示的话
+create_example_source() -> Result<String, String>
+
+// v0.2.0：导入一份配置——**先校验，通过了才写盘**
+import_source_file(file_name: String, content: String)
+    -> Result<ImportOutcome, String>        // { written: Option<String>, problems: Vec<Problem> }
 ```
+
+**`list_sources` 在 v0.2.0 从 `Vec<WallpaperSource>` 改成了 `SourcesResult`。**
+多出来的 `problems` 是加载期校验的结果（详见 `docs/CUSTOM-SOURCES.md` §7），
+`folder` 是配置目录（界面要显示它、还要能打开它）。**空 `problems` = 一切正常**。
+
+前端对应的类型在 `src/lib/api.ts`；`SourceProblem.severity` 是 `"error" | "warning"`，
+`error` 意味着那条图源**没有被加载**。
+
+**`import_source_file` 的顺序不能反**：先校验再写盘。反过来会让用户目录里堆一串
+坏文件，用户刚点完导入就看到满屏报错，会以为是他自己的问题。
 
 **`fetch_images` 在 2026-11-02 从 `Vec<ImageDto>` 改成了 `FetchResult`**：
 多出来的 `notice` 是"后端为了让结果不为空做了什么"。目前只有一种：
@@ -558,7 +609,10 @@ export async function fetchImages(
 |---|---|---|
 | **缓存会记住错误**：下载到一张 HTML 错误页，也会被永久当成"这张图"，不会自愈（**现在至少会报错**：`normalize` 认出"不是能识别的图片"，不会把错误页设成壁纸） | `wallpaper/download.rs` | 加「清空缓存」按钮；临时解法：删掉 `%LOCALAPPDATA%\com.remblued.moewallpaper` |
 | ~~`current.jpg` 里可能装着 PNG / WebP 数据，靠 Windows 按内容识别格式~~ | `wallpaper/current.rs` + `normalize.rs` | **已还**：落盘前统一转成 JPEG（已是 JPEG 的原样透传），解不出来就报错。见 `docs/SOURCES-CN.md` §7.3 |
-| 安全参数靠"记得配"——图源没写 `sfwQuery` 就没有任何内容限制，而这一点只有 code review 能保证 | `sources/builtin/sources.json` | **`v0.2.0` 做用户自接图源时**必须在加载阶段强制校验：要么配 `sfwQuery`，要么显式标记"API 本身只提供安全内容"。这条也是"自定义图源为什么排在挂件前面"的原因之一 |
+| 安全参数靠"记得配"——图源没写 `sfwQuery` 就没有任何内容限制，而这一点只有 code review 能保证 | `sources/builtin/sources.json` | **已还（v0.2.0）**：`validate.rs` 强制"`sfwQuery` 或 `sfwSafeEndpoint` 二选一"，内置 5 个也要过；safebooru 那种"安全条件在模板里"的情形另有一条测试守着模板不被删 |
+| **用户图源可以指向任意 http(s) 地址**（包括 `localhost` / 内网）——配置能被用来探测本机端口 | `sources/validate.rs` | **有意保留**：自建 booru 是正当用法，禁掉内网会让"自己的服务器"不可用。代价是"配置可信"这个前提，而配置本来就来自用户自己的磁盘 |
+| **面板不监听文件变化**：改了文件必须点「重新加载」 | `src/main.ts::initSourcesPanel` | 自动监听要做文件系统 watcher（新增依赖 + 权限 + 抖动处理）。现在的文案已经写明"放进文件夹后点重新加载"。要做得先问值不值 |
+| **不能隐藏内置图源**：用户不喜欢某个内置源也只能不选它，它一直在下拉框里 | `sources/loader.rs` | 要加得先定规则（用户配置能不能覆盖内置同名 id？）。目前"撞 id = 后加载的作废"是明确的一刀切 |
 | 中文词表只收了约 150 个高频词，长尾词翻不了（`search/terms.json`） | `search/terms.json` | 持续加词；搜不到时 UI 已提示改用英文 |
 | 英文译名对不上目标站标签就会搜不到（映射正确 ≠ 标签存在） | `search/terms.json` | 加词时**实测一次**：拿翻出来的英文去 wallhaven 搜，看条数是不是 0 |
 | 国内免费接口几乎都是"单图 302 / 直接返回一张图"，不是列表；本项目 schema 只吃列表 | `sources/model.rs` | 要支持单图源，得加一种 source 类型（v0.4 插件化时一起做）。**2026-10-31 实测清单见 `docs/SOURCES-CN.md` §7、§9** |
@@ -575,8 +629,8 @@ export async function fetchImages(
 | `sfwQuery` 是静态追加，无法与 `{query}` 合并；booru 类接口要求所有条件在同一个 `tags` 参数里，两个 `tags` 会让 PHP 取最后一个、搜索词静默丢失 | `sources/fetch.rs::apply_sfw_query` | safebooru 的绕法是把分级写进 URL 模板；根治要改格式（安全条件与搜索词合并） |
 | **"能不能直连"被当成站点属性写进文档**。同一台机器同一天，nekos.best 上午 403、下午 200 | `docs/SOURCES-CN.md`、README | 描述只能写"实测于某时某网络"，不写"国内不可用"。见 `docs/SOURCES-CN.md` §10 第 0 条 |
 | **确定性列表在界面上和"缓存坏了"完全无法区分**：`pid=0`/`start=0` 永远返回同一批，用户关掉重开也一样，只会来报"你程序有 bug"。360 和 safebooru 各踩过一次 | `sources/builtin/sources.json` 的 `filter.random*Max` | 接图源时按 `docs/SOURCES-CN.md` §0.1 逐条过；`fetch.rs::deterministic_first_page_sources_must_declare_randomisation` 守着 safebooru 不被改回确定性 |
-| 前端类型是手抄 Rust 结构体，改一边不会同步另一边 | `lib/api.ts` ↔ `dto.rs` | 结构体超过 5 个时考虑 `ts-rs` 自动生成 |
-| `src/lib/sources/schema.ts` 暂时没人 import | — | 做图源编辑功能时会用到，别当垃圾删了 |
+| 前端类型是手抄 Rust 结构体，改一边不会同步另一边 | `lib/api.ts` ↔ `dto.rs` | 结构体超过 5 个时考虑 `ts-rs` 自动生成。**v0.2.0 又多了 `SourcesResult` / `Problem` / `ImportOutcome` 三个**，这条债在变重 |
+| `src/lib/sources/schema.ts` 暂时没人 import | — | 它是**给写配置的人看的说明书**（对照 `validate.rs` 的字段表），不是死代码；别当垃圾删了。v0.2.0 起它对用户可见，改 `model.rs` 时必须同步改它 |
 | 并发下载会撑爆内存（一页 24 张 4K ≈ 120MB） | `wallpaper/download.rs` | 做预加载时必须限并发 |
 | 详情页没有焦点陷阱（Tab 能跑到覆盖层后面的元素） | `src/main.ts` | 无障碍完善时再加 `inert` 或焦点循环；不影响键盘关闭 |
 | `ToggleChange.kind` 那种"用 String 当枚举"的写法 | 暂无（参考项目里有） | 见到就改成 `enum` |
@@ -627,6 +681,13 @@ export async function fetchImages(
 | **点缩略图，打开的大图是隔壁那张**（只在开了筛选、且筛掉了不止一张时出现） | 卡片上写的是**筛选后**的序号，点击处理器拿它去查**未筛选**的完整数组，筛掉几张后面全体错位 | 已修（2026-11-02）：`gridEntries()` 一处生成"图 + 它在原数组里的下标"，渲染和点击共用同一个下标。**别在 `renderGrid` 里重新算序号** |
 | **某个关键词怎么都搜不到，换英文也一样** | 两种原因：① 该图源的分页随机被套到了搜索上（页码被扔到结果集第 16 万条）；② booru 标签和口语不同（`lycoris` 不存在，`lycoris_recoil` 才是） | 搜索不许随机（见 §4"两条硬规矩"）；booru 类图源配 `search.wildcardFallback: true`。都在 2026-11-02 修好，`docs/SOURCES-CN.md` §9.6 有实测表 |
 | 打包好的 exe 双击不弹窗、也不出界面；PowerShell 启动则几十毫秒就退出，退出码 `-2147483645`，事件日志和 WER 都干净 | **不是你的代码**。装了第三方杀软（本机是 Kaspersky 21.26，`KLIF`/`klflt` 内核驱动 hook 进程创建），未签名的构建会被它拦掉。先看 `root/SecurityCenter2` 和运行中的过滤驱动 | 把项目目录加进杀软排除项，或临时暂停防护。测量时两个基线要在同一防护状态下跑 |
+| **自己写的图源放进去了，下拉框里没有** | 三种：① 校验没过（面板红字）；② `enabled: false`；③ id 撞了内置图源 | 点 🧩 看红字。红字会写"哪个文件 · 哪个 id · 为什么" |
+| 面板提示 **"不是 UTF-8 编码"** | 记事本存成了「ANSI」= GBK。BOM 没问题，GBK 不行 | 另存为 UTF-8；或直接用「导入 .json…」，它会在写盘前拦住 |
+| 面板提示 **"JSON 语法错误：expected ... at line N column M"** | 少逗号 / 多逗号 / 引号不配对。N/M 是**文件里**的位置 | 按行号改。JSON 不能有注释——想写说明就用 `"_comment": "..."` |
+| 面板提示 **"没有声明内容安全条件"** | `filter` 里既没有 `sfwQuery` 也没有 `sfwSafeEndpoint` | 二选一，见 `docs/CUSTOM-SOURCES.md` §6。**这条是硬校验，不是建议** |
+| 面板提示 **"不认识的占位符 {pages}"** | 占位符拼错。`Url::parse` 会把它编码成一个能发出去的地址，结果只会是"空列表" | 可用的是 `{page}` `{pageIndex}` `{offset}` `{limit}` `{query}` |
+| 拉图时报 **"图源 X 没有加载：…"** | 配置刚被改坏，或 id 变了 | 消息里直接带着拒收原因；改完点「重新加载」 |
+| 拉图时报 **"找不到图源 X（当前加载了 N 个…）"** | 界面上的选中值比磁盘旧：文件被删/改名了 | 打开面板点「重新加载」 |
 | SignPath 申请表：点 Submit 一直转圈；刷新后按钮点不动 | 那张表是 **HubSpot 嵌入表单**（`js-eu1.hsforms.net`）。系统代理指向一个坏节点时，页面 HTML 可能还能从缓存出来，但**表单脚本加载不全**（按钮没绑定）+ **提交 POST 一直 pending**。2026-10-31 实测：这几个域名直连 200/302，走当时的 `127.0.0.1:7890` 全是 000 | **关系统代理**（或换节点 / 给 `signpath.org`、`*.hsforms.net`、`*.hsforms.com`、`*.hs.net` 设 DIRECT）→ `Ctrl+Shift+R` 硬刷新 → 关掉广告拦截扩展。**先查邮箱确认上一次是否其实提交成功**——成功过之后再提交就会表现为点不动。真不行就发 <https://signpath.io/support> 并附 `docs/SIGNPATH.md` 的材料 |
 
 ---
@@ -639,9 +700,11 @@ export async function fetchImages(
 
 ```
 docs/HANDOVER.md
-src/lib/api.ts                  ← 前端能调的三个命令，和 ImageDto
+docs/CUSTOM-SOURCES.md          ← v0.2.0 起：图源格式、校验规则、排错
+src/lib/api.ts                  ← 前端能调的七个命令，和 ImageDto
 src-tauri/src/sources/dto.rs    ← ImageDto 的真实定义（api.ts 是手抄它的）
 src-tauri/src/sources/model.rs  ← 图源配置的结构
+src-tauri/src/sources/validate.rs ← 图源配置的校验（改格式时和上面那份一起改）
 ```
 
 不读这几份，AI 会建议你装 React、改字段名、换目录结构——**每一条都会和现有约定打架。**

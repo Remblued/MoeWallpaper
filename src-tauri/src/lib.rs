@@ -32,6 +32,9 @@ pub fn run() {
             commands::fetch_images,
             commands::set_wallpaper,
             commands::save_image,
+            commands::open_sources_dir,
+            commands::create_example_source,
+            commands::import_source_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

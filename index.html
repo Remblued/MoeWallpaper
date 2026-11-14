@@ -35,6 +35,7 @@
           <option value="tablet" title="宽高比 1.15~1.6 或 0.62~0.87：2048×1536、3000×2000 等">平板（4:3）</option>
           <option value="phone" title="宽高比 &lt; 0.62：1080×1920、1080×2400、1440×3200 等">手机（竖屏）</option>
         </select>
+        <button id="sources-btn" class="icon-btn" type="button" aria-label="图源管理" title="图源管理（接入自己的 API）">🧩</button>
         <button id="theme-toggle" class="icon-btn" type="button" aria-label="切换主题">🌙</button>
       </header>
 
@@ -56,6 +57,40 @@
 
       <!-- 操作反馈 toast -->
       <div id="toast" class="toast" hidden></div>
+
+      <!--
+        图源管理面板（v0.2.0：用户接入自己的 API）。
+        放静态标记而不是 JS 里拼 innerHTML：这块有链接、有文件选择框，
+        写在 HTML 里能被读到、能被审查，出问题也一眼看得出结构。
+      -->
+      <div id="sources-overlay" class="panel-overlay" hidden>
+        <div class="panel-backdrop" data-action="close-sources"></div>
+        <section class="panel" role="dialog" aria-modal="true" aria-labelledby="sources-title">
+          <header class="panel-head">
+            <h2 id="sources-title">图源</h2>
+            <button class="panel-close" type="button" data-action="close-sources" aria-label="关闭" title="关闭 (Esc)">×</button>
+          </header>
+
+          <p class="panel-lead">
+            把图源配置（<code>.json</code>）放进下面这个文件夹，点「重新加载」就会出现在
+            图源下拉框里。字段说明见
+            <a id="sources-doc" href="https://github.com/Remblued/MoeWallpaper/blob/main/docs/CUSTOM-SOURCES.md" target="_blank" rel="noopener">docs/CUSTOM-SOURCES.md</a>。
+          </p>
+
+          <p class="panel-path"><code id="sources-folder">（未知）</code></p>
+
+          <div class="panel-actions">
+            <button id="sources-open" class="panel-btn" type="button">打开文件夹</button>
+            <button id="sources-reload" class="panel-btn" type="button">重新加载</button>
+            <button id="sources-import" class="panel-btn" type="button">导入 .json…</button>
+            <button id="sources-example" class="panel-btn" type="button">生成示例配置</button>
+            <input id="sources-file" type="file" accept=".json,application/json" hidden />
+          </div>
+
+          <p id="sources-summary" class="panel-summary"></p>
+          <ul id="sources-problems" class="panel-problems"></ul>
+        </section>
+      </div>
     </main>
   </body>
 </html>

@@ -1,24 +1,39 @@
 {
-  "_comment": "没联网的示例，展示 sources/builtin/sources.json 的完整字段。不会被打包进 exe。需要内容限制的图源要写 filter.sfwQuery（例如 purity=100），写法见 sources/builtin/sources.json。",
+  "_comment": "图源配置示例。这是一份**能真的跑通**的配置（safebooru），照着它的形状改成你要的接口就行。以 _ 或 $ 开头的键是注释，随便写、随便删，程序不读。改完记得把 enabled 设成 true，或者删掉那一行（默认就是 true）。详细说明见 docs/CUSTOM-SOURCES.md。",
   "schemaVersion": 1,
   "sources": [
     {
+      "_comment": "id 只能用 a-z 0-9 . _ -，全局唯一，别和内置图源撞（360 / safebooru / wallhaven / nekos-best / lolicon）。name 是下拉框里显示的名字。contentNote 会在名字旁边标一句提示，例如「尺度较大」。",
       "id": "example",
-      "name": "示例图源（不可用）",
+      "name": "示例 · Safebooru",
       "enabled": false,
-      "homepage": "https://example.invalid/",
+      "homepage": "https://safebooru.org/",
       "request": {
-        "url": "https://example.invalid/api/posts?limit={limit}&page={page}",
+        "_comment": "{page} 第几页（从 1 开始）、{pageIndex} 第几页减一（pid 这种 0 起页码用它）、{offset} (page-1)*limit（start 这种偏移量用它）、{limit} 每页几张。",
+        "url": "https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit={limit}&pid={pageIndex}&tags=rating:general+width:>=1920",
         "method": "GET",
         "headers": {
           "Accept": "application/json"
         }
       },
       "response": {
-        "itemsPath": "data",
+        "_comment": "响应外面包了一层就用 itemsPath 指过去（例如 wallhaven 是 data）；根就是数组就省略它。imageUrl 是原图、thumbnailUrl 是网格用的小图，没有缩略图那一项就省略（网格会直接加载原图，很费流量）。",
         "imageUrl": "file_url",
-        "thumbnailUrl": "sample_url",
-        "pageUrl": "post_url"
+        "thumbnailUrl": "preview_url",
+        "width": "width",
+        "height": "height"
+      },
+      "filter": {
+        "_comment": "内容安全二选一，必填：有分级参数的接口写 sfwQuery（例如 purity=100、r18=0）；接口本身只给安全内容的写 sfwSafeEndpoint: true。安全条件写在地址模板里也行，但那次要同时标 sfwSafeEndpoint，并且别把那一截删掉。randomPageIndexMax / randomOffsetMax：第 1 页永远同一批的接口必须配，否则用户看到的是「图怎么不换」。",
+        "randomPageIndexMax": 8000,
+        "sfwSafeEndpoint": true
+      },
+      "search": {
+        "_comment": "不写这一整块 = 这个图源不支持搜索，界面上搜索框会对它禁用。url 里必须有 {query}。english：先把中文关键词翻成英文（走内置词表）。underscoreTags：把空格换成下划线（booru 类站点必须开）。wildcardFallback：精确标签搜到 0 条时补个 * 再试一次（只在接口认前缀匹配时开）。",
+        "url": "https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit={limit}&pid={pageIndex}&tags=rating:general+{query}",
+        "english": true,
+        "underscoreTags": true,
+        "wildcardFallback": true
       }
     }
   ]

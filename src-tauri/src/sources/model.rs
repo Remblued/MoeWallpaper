@@ -67,6 +67,27 @@ pub struct SourceFilter {
     /// 写在这里而不是直接塞进 `request.url`，是为了让"安全"这件事在配置里
     /// 一眼可见，而且加图源的人不会忘。
     pub sfw_query: Option<String>,
+    /// 声明"这个接口本身只提供安全内容"，用于**没有分级参数可配**的图源。
+    ///
+    /// **它和 `sfw_query` 是二选一，两者都没有的图源在加载阶段会被拒收**
+    /// （`sources::validate`）。这条不是建议，是硬校验：`v0.1.x` 时"安全参数靠
+    /// 记得配"，只有 code review 能保证；从 v0.2.0 起用户会写自己的配置，
+    /// 没人 review 了，所以必须由代码问出这个问题。
+    ///
+    /// 两种正当情形：
+    ///
+    /// 1. 站点没有分级概念（360 的动漫分类、nekos.best 的 `/api/v2/neko`）。写在这里
+    ///    等于向以后的维护者承诺"这个接口不会返回越界内容"——**请在文档里写明依据**
+    ///    （`docs/SOURCES-CN.md` §11 有内置图源的逐条依据）。
+    /// 2. 安全条件已经硬编码在地址模板里（safebooru 的 `tags=rating:general+…`）。
+    ///    这种情形最容易骗过自己：**改模板时删掉 `rating:general`，这个字段还在，
+    ///    但它已经不再为真**。所以 `loader.rs` 另有一条测试盯着 safebooru 的两个
+    ///    模板里必须各有一个 `rating:general`。
+    ///
+    /// 反例（写这个字段就是撒谎）：wallhaven 有 `purity`、lolicon 有 `r18`——
+    /// 有参数可用就必须用参数，别用一句声明代替。
+    #[serde(default)]
+    pub sfw_safe_endpoint: bool,
     /// 把图片地址从 `http://` 升级成 `https://`。
     ///
     /// **为什么必须有这个开关**：有的接口（360 壁纸）只支持 http，但它返回的图片
@@ -159,7 +180,12 @@ pub struct WallpaperSource {
     /// 稳定标识，用于缓存目录名；发布后不要改。
     pub id: String,
     pub name: String,
-    #[serde(default)]
+    /// 是否出现在下拉框里。
+    ///
+    /// **v0.2.0 起默认是 `true`**（原来默认 `false`）。理由：用户自己写的配置
+    /// 忘了这个字段时，得到的是"文件明明放进去了，下拉框里没有"，而且不报错——
+    /// 对陌生人来说这比"多出现一个不想要的图源"难查得多。想关掉就显式写 `false`。
+    #[serde(default = "default_enabled")]
     pub enabled: bool,
     pub homepage: Option<String>,
     /// 内容提示，比如"尺度较大"。有值就会显示在图源名旁边。
@@ -178,6 +204,17 @@ pub struct WallpaperSource {
     /// 不配 = 不支持搜索。
     #[serde(default)]
     pub search: Option<SearchSpec>,
+    /// 这条配置来自**用户目录**（`%APPDATA%\com.remblued.moewallpaper\sources`），
+    /// 不是随程序打包的内置图源。
+    ///
+    /// 由 `loader` 填写，**配置文件里写它没有意义**（会被覆盖）。前端用它分组、
+    /// 标记"自定义"，以及在报错文案里区分"我们的内置源坏了"和"你的配置有问题"。
+    #[serde(default)]
+    pub custom: bool,
+}
+
+fn default_enabled() -> bool {
+    true
 }
 
 /// `sources/builtin/*.json` 的顶层结构。

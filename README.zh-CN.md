@@ -11,7 +11,9 @@
 > 要求法人主体。所以首次运行可能被 SmartScreen 警告，部分杀软会直接拦。**请用发布页上的
 > SHA-256 校验。** 细节：[DOWNLOAD.md](DOWNLOAD.md) · [docs/SIGNING.md](docs/SIGNING.md)。
 
-> **状态：`v0.1.3`。** ✅ 已完成 · 🚧 进行中 · 📋 计划中。只有 [Roadmap](#roadmap) 里的内容才算数。
+> **状态：`v0.2.0` 在做。** `v0.1.3` 是当前发布版；`v0.2.0`（自定义图源）的代码与文档已在
+> main 上，**还没有发版**——发版前要重新测那四个数字。✅ 已完成 · 🚧 进行中 · 📋 计划中。
+> 只有 [Roadmap](#roadmap) 里的内容才算数。
 
 ## 这个项目想解决什么
 
@@ -130,11 +132,13 @@ Electron 那 356.77 MB 不是虚胖出来的：光 `BaselineElectron.exe` **一�
   Electron 的**下限**，不是上限——一个真能用的 Electron 壁纸应用只会更大。
 - 一旦测量结果和宣称冲突，**改宣称**。数字是产品，宣传语不是。
 
-## 功能（v0.1.3）
+## 功能（`v0.1.3` 发布版 + main 上待发的 `v0.2.0`）
 
 | 功能 | 状态 |
 | --- | --- |
 | 从 JSON 图源拉图（360 / safebooru / wallhaven / nekos.best / lolicon） | ✅ |
+| **接入你自己的 API**：往配置目录放一份 JSON，就是一个图源 | 🚧 main 上，`v0.2.0` 未发版 |
+| 图源管理面板：文件夹路径、重新加载、导入 .json、生成示例、逐条报错 | 🚧 main 上，`v0.2.0` 未发版 |
 | 缩略图网格 + 骨架屏 + 加载失败占位 | ✅ |
 | 图片详情页：大图、设为壁纸、下载、打开原网页 | ✅ |
 | 关键词搜索（中文词表 + 各图源自己的搜索端点） | ✅ |
@@ -151,8 +155,9 @@ Electron 那 356.77 MB 不是虚胖出来的：光 `BaselineElectron.exe` **一�
 | CI（fmt / clippy / test / tsc / vite / node:test，GitHub Actions） | ✅ |
 | 定时切换 | ❌ 明确不做，见下 |
 
-> 上表就是 `v0.1.3` 发布版的家当。三个 bug 修复和比例筛选都在里面；
-> 修的是哪三个、为什么当时没测出来，见 [交接文档](docs/HANDOVER.md) §1。
+> 上表里 `v0.2.0` 那两行**只在 main 上**：安装包还是 `v0.1.3`，里面没有图源管理面板。
+> 自定义图源的完整说明见 [docs/CUSTOM-SOURCES.md](docs/CUSTOM-SOURCES.md)。
+> `v0.1.3` 修的是哪三个 bug、为什么当时没测出来，见 [交接文档](docs/HANDOVER.md) §1。
 
 ### v0.1.0 明确不做
 
@@ -168,33 +173,49 @@ Electron 那 356.77 MB 不是虚胖出来的：光 `BaselineElectron.exe` **一�
 
 ```json
 {
-  "id": "example",
-  "name": "Example source (template)",
-  "enabled": false,
-  "request": {
-    "url": "https://example.invalid/api/posts?limit={limit}&page={page}",
-    "headers": { "Accept": "application/json" }
-  },
-  "response": {
-    "itemsPath": "data",
-    "imageUrl": "file_url",
-    "thumbnailUrl": "sample_url",
-    "tags": "tags"
-  },
-  "filter": { "sfwOnly": true }
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "example",
+      "name": "示例图源",
+      "request": {
+        "url": "https://example.invalid/api/posts?limit={limit}&page={page}",
+        "headers": { "Accept": "application/json" }
+      },
+      "response": {
+        "itemsPath": "data",
+        "imageUrl": "file_url",
+        "thumbnailUrl": "sample_url",
+        "width": "w",
+        "height": "h"
+      },
+      "filter": { "sfwQuery": "purity=100" }
+    }
+  ]
 }
 ```
 
 - 内置定义放在 [`sources/builtin/`](sources/builtin/)，类型契约在
   [`src/lib/sources/schema.ts`](src/lib/sources/schema.ts)。
-- `{limit}` 和 `{page}` 是应用唯一会替换的占位符。
-- **默认 SFW。** 图源只返回能标记为安全的内容，除非用户显式关闭；默认值永远不是"关闭"。
+- 占位符：`{page}`、`{pageIndex}`（页码 − 1）、`{offset}`（`(page-1)×limit`）、`{limit}`，
+  以及**只在 `search.url` 里**有效的 `{query}`。
+- **内容安全是硬要求。** `filter` 里 `sfwQuery`（有分级参数）和 `sfwSafeEndpoint`
+  （接口本身就只给安全内容）必须有一个；两者都没有的图源在加载阶段就被拒。
+  五个内置图源各自的依据写在 [SOURCES-CN §11](docs/SOURCES-CN.md)。
 - 图源配置里永远不放 API Key。需要 Key 的图源不进内置列表。
+
+**你自己的图源**（`v0.2.0`）：把同样的 JSON 放进
+`%APPDATA%\com.remblued.moewallpaper\sources\`，点右上角 🧩 →「重新加载」。
+校验不过的配置不会生效，但会逐条告诉你哪个文件、哪个字段、怎么改。
+完整字段表与排错见 [**docs/CUSTOM-SOURCES.md**](docs/CUSTOM-SOURCES.md)。
 
 ## 你的数据在哪
 
 - 无账号、无遥测、无统计。
-- 缩略图与当前壁纸缓存在应用本地数据目录（`%LOCALAPPDATA%\<应用标识>\`），不进仓库。
+- 缩略图与当前壁纸缓存在应用本地数据目录（`%LOCALAPPDATA%\com.remblued.moewallpaper\`），
+  不进仓库。
+- 你自己的图源配置在 `%APPDATA%\com.remblued.moewallpaper\sources\`——**和缓存分开放**，
+  因为缓存是可以随时清空的，配置不能跟着一起没。
 - 清缓存是应用内的普通操作，不需要重装。
 
 ## 从源码构建
@@ -220,27 +241,41 @@ npm run tauri build    # release 构建；安装包出现在 src-tauri/target/re
 ```text
 .
 ├─ src/                         # 前端（原生 TypeScript，Vite 构建）
-│  ├─ main.ts                   # 入口：挂载 UI
-│  ├─ lib/                      # 与框架无关的逻辑，可单测
-│  │  └─ sources/schema.ts      # 图源 JSON 的类型契约
-│  ├─ ui/                       # 📋 DOM 渲染与事件绑定
-│  └─ assets/                   # 随前端分发的静态资源
-├─ sources/builtin/             # 随应用分发的图源定义（只有 JSON，没有图片）
+│  ├─ main.ts                   # 入口：界面、事件、图源面板
+│  ├─ styles.css
+│  └─ lib/                      # 与框架无关的逻辑，可单测（tests/*.test.ts）
+│     ├─ api.ts                 # 唯一出现 invoke( 的地方
+│     ├─ filters.ts             # 分辨率 / 比例筛选
+│     ├─ source-groups.ts       # 图源分组与重载后的选中项
+│     └─ sources/schema.ts      # 图源 JSON 的类型契约
+├─ tests/                       # 前端纯逻辑测试（node --test，零依赖）
+├─ sources/
+│  ├─ builtin/sources.json      # 随应用分发的 5 个图源（只有 JSON，没有图片）
+│  └─ examples/                 # 「生成示例配置」用的模板，同一份文件
+├─ search/terms.json            # 中文 → 英文标签词表
 ├─ src-tauri/                   # Rust 侧
 │  ├─ src/main.rs               # 进程入口，调用库
 │  ├─ src/lib.rs                # 应用装配、Tauri Builder
-│  ├─ src/commands/             # 📋 暴露给前端的 #[tauri::command]
-│  ├─ src/sources/              # 📋 加载与拉取图源
-│  ├─ src/wallpaper/            # 📋 设置与缓存壁纸
+│  ├─ src/commands/mod.rs       # 暴露给前端的 7 个命令
+│  ├─ src/sources/
+│  │  ├─ model.rs               # 图源格式（改这里 = 改格式）
+│  │  ├─ loader.rs              # 内置 + 用户目录合并、文件读写
+│  │  ├─ validate.rs            # 加载期校验：错误丢源、警告保留
+│  │  ├─ fetch.rs               # 发请求、拼地址、随机页码
+│  │  ├─ extract.rs             # 响应 → 图片列表
+│  │  └─ search.rs              # 关键词 → 目标站的标签形态
+│  ├─ src/wallpaper/            # 设置与缓存壁纸
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
-├─ docs/BENCHMARK.md            # 体积与速度数字是怎么来的
+├─ bench/measure/               # 量那四个数字用的脚本
+├─ docs/
+│  ├─ CUSTOM-SOURCES.md         # 自定义图源：字段表、校验规则、排错
+│  ├─ BENCHMARK.md              # 体积与速度数字是怎么来的
+│  ├─ SOURCES-CN.md             # 图源实测记录与验收清单
+│  └─ HANDOVER.md               # 交接：现状、约定、技术债
 ├─ LICENSE
 └─ README.md · README.zh-CN.md
 ```
-
-标 📋 的目录现在故意不存在：git 不跟踪空目录，目录要靠"第一个真实文件"建立，而不是
-先建一个空架子。
 
 ## Roadmap
 
@@ -249,7 +284,7 @@ npm run tauri build    # release 构建；安装包出现在 src-tauri/target/re
 | `v0.1.1` | **国内直连图源**（360 壁纸动漫分类）+ 偏移量分页、合并尺寸字段、图片 https 升级 | ✅ |
 | `v0.1.2` | 玻璃主题**跟随系统亮/暗**（半透明，不做全透明）；新增 safebooru 图源、lolicon 内容标注 | ✅ |
 | `v0.1.3` | 修三个真 bug：**点缩略图打开的是隔壁那张**、**safebooru 搜索被随机页码吃掉**、**词表里的英文别名从来没生效过**；新增**比例筛选**（显示器 / 平板 / 手机）；前端第一次有单测 | ✅ |
-| `v0.2.0` | **允许用户接入自己的 API**：自己的 JSON 图源配置，加载时校验（`v0.1.x` 只做内置图源，这是决定） | 📋 |
+| `v0.2.0` | **允许用户接入自己的 API**：自己的 JSON 图源配置，加载时校验（内容安全声明、占位符、id、未知字段），图源管理面板。代码已在 main | 🚧 待发版 |
 | `v0.3.0` | **桌面挂件**——故意排在源系统之后，理由见下 | 📋 |
 | `v0.4.0` | 插件式图源（前提：声明式格式真的不够用了） | 📋 |
 | 未排期 | 自动更新、界面多语言、详情页焦点陷阱、代码签名（见 [docs/SIGNING.md](docs/SIGNING.md)） | 📋 |
@@ -257,14 +292,13 @@ npm run tauri build    # release 构建；安装包出现在 src-tauri/target/re
 `v0.1.1` 就是原来计划放在 `v0.2.0` 里的国内源：没有它，应用在国内是"装完打开是空的"，
 比任何新功能都紧急。
 
-**为什么自定义图源排在桌面挂件前面。** 挂件原来也在 `v0.2.0`，现在挪到 `v0.3.0`，
-是有意的：
+**为什么自定义图源本来排在桌面挂件前面**（现在它已经落地了，这段留着解释顺序）：
 
 - **内容是产品，窗口不是。** 内置 5 个源受限于那些接口给什么、以及它们的条款；
   用户自接图源把"我能看什么"从我们写死的 5 份清单变成用户自己的清单。挂件一张图都不加。
 - **卡点已经写在债表里了。** 允许用户塞任意 JSON 之后，`sfwQuery` 那个洞就不再是
-  "code review 记得配"，而必须是加载时的运行时校验（`HANDOVER.md` §7）。而挂件的前置
-  条件——常驻的第二个窗口、多显示器 DPI、它和 Acrylic 的相互影响——**一条都还没列**。
+  "code review 记得配"，而必须是加载时的运行时校验（`HANDOVER.md` §7）。这条已经还了：
+  `validate.rs` 里两者都没有的图源一律不加载，内置 5 个自己也要过这一关。
 - **格式必须先冻结，再让陌生人写配置。** 现在改图源 schema 是内部重构；`v0.2.0` 之后
   改就是破坏兼容。先把 schema 在自定义图源这里定下来，挂件的数据层就顺手有了。
 - **出事的范围不同。** 一个坏的用户图源只坏它自己；一个常驻窗口能把主窗口一起拖下水。

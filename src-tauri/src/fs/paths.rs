@@ -17,6 +17,27 @@ pub fn wallpapers_dir() -> Result<PathBuf, String> {
     Ok(cache_dir()?.join("wallpapers"))
 }
 
+/// 用户配置根目录：`%APPDATA%\com.remblued.moewallpaper`。
+///
+/// **故意不放在 `cache_dir()` 下面。** 缓存是可以随时清空的东西，而这里存的是
+/// 用户自己写的图源配置——将来的「清空缓存」按钮只要顺手写成删 `cache_dir()`，
+/// 用户的配置就没了。两个生命周期不同的数据不该共用一棵树（这条在
+/// `current_file` 上面也写过一次，同一种错不值得犯两遍）。
+///
+/// 用 `APPDATA`（Roaming）而不是 `LOCALAPPDATA` 也是同一个理由：配置跟着用户走，
+/// 缓存不用。
+pub fn config_dir() -> Result<PathBuf, String> {
+    let base = std::env::var("APPDATA").map_err(|_| "找不到环境变量 APPDATA".to_string())?;
+    Ok(PathBuf::from(base).join("com.remblued.moewallpaper"))
+}
+
+/// 用户图源配置目录：把 `*.json` 丢进这里，点「重新加载」就会出现在下拉框里。
+///
+/// 格式见 `docs/CUSTOM-SOURCES.md`；加载逻辑见 `sources::loader`。
+pub fn sources_dir() -> Result<PathBuf, String> {
+    Ok(config_dir()?.join("sources"))
+}
+
 /// 正在使用的壁纸的固定落点。
 ///
 /// 为什么要单独存一份，而不是直接把缓存文件设成壁纸：

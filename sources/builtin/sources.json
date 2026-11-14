@@ -22,7 +22,8 @@
       },
       "filter": {
         "httpsUpgrade": true,
-        "randomOffsetMax": 8000
+        "randomOffsetMax": 8000,
+        "sfwSafeEndpoint": true
       }
     },
     {
@@ -44,7 +45,8 @@
         "height": "height"
       },
       "filter": {
-        "randomPageIndexMax": 8000
+        "randomPageIndexMax": 8000,
+        "sfwSafeEndpoint": true
       },
       "search": {
         "url": "https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit={limit}&pid={pageIndex}&tags=rating:general+{query}",
@@ -99,6 +101,9 @@
         "pageUrl": "source_url",
         "width": "dimensions.width",
         "height": "dimensions.height"
+      },
+      "filter": {
+        "sfwSafeEndpoint": true
       }
     },
     {

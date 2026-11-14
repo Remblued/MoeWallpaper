@@ -470,6 +470,7 @@ mod tests {
     fn filter(query: Option<&str>) -> SourceFilter {
         SourceFilter {
             sfw_query: query.map(str::to_string),
+            sfw_safe_endpoint: false,
             https_upgrade: false,
             random_offset_max: None,
             random_page_index_max: None,
@@ -581,6 +582,7 @@ mod tests {
             },
             filter: Default::default(),
             search: None,
+            custom: false,
         }
     }
 

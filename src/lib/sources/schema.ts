@@ -1,11 +1,17 @@
 /**
- * 图源（source）配置的类型契约 —— 对应 `sources/builtin/*.json`。
+ * 图源（source）配置的类型契约 —— 对应 `sources/builtin/*.json`
+ * 和用户自己的配置文件。
  *
  * 设计目标：加一个图源只改 JSON，不改代码。因此这里的类型必须覆盖
  * "请求怎么发、响应怎么读、要不要过滤"三件事，其它一律不做。
  *
  * 修改本文件 = 修改图源格式，属于破坏性变更：
- * 需要同步改 `schemaVersion`、`sources/builtin/` 下的文件，以及 README 的示例。
+ * 需要同步改 `schemaVersion`、`sources/builtin/` 下的文件、
+ * `src-tauri/src/sources/model.rs`、`validate.rs` 的字段表，以及 README 的示例。
+ *
+ * **加载期校验以 Rust 侧为准**（`src-tauri/src/sources/validate.rs`）：
+ * 这里只是给写配置的人看的说明书，不参与运行时判断。
+ * 面向用户的完整字段表与排错见 `docs/CUSTOM-SOURCES.md`。
  */
 
 /** HTTP 请求描述。 */
@@ -17,9 +23,13 @@ export interface HttpRequestSpec {
    * - `{pageIndex}`：`page - 1`，给"页码从 0 开始"的接口用（Gelbooru 的 `pid`）
    * - `{offset}`：`(page - 1) * limit`，给偏移量分页的接口用（360 壁纸的 `start`）
    * - `{query}`：搜索关键词（只有在 `search.url` 里才有意义）
+   *
+   * 写了不认识的占位符（`{pages}`）会在加载阶段被拒：`Url::parse` 会把它编码成
+   * 一个"合法但服务端看不懂"的地址，那种 bug 只表现为"结果为空"。
    */
   url: string;
-  method?: "GET" | "POST";
+  /** 只实现 GET。写别的会在加载阶段被拒，而不是等运行时才报错。 */
+  method?: "GET";
   headers?: Record<string, string>;
 }
 
@@ -39,7 +49,12 @@ export interface ResponseMapping {
   thumbnailUrl?: string;
   /** 作品/详情页 URL，用于标注来源与作者。 */
   pageUrl?: string;
-  /** 标签字段，用于展示和二次过滤。 */
+  /**
+   * 标签字段。
+   *
+   * **目前是死配置**：格式里有、`ImageRef` 里没有、代码不读、界面不显示。
+   * 写了不会报错，但也不会有效果——别以为它能做二次过滤。
+   */
   tags?: string;
   /** 原图宽度的字段路径；省略 = 该图源不提供尺寸，分辨率筛选对它无效。 */
   width?: string;
@@ -61,10 +76,25 @@ export interface SourceFilter {
   /**
    * 由后端注入到请求地址末尾的安全参数，例如 `purity=100`、`r18=0`。
    *
-   * 只写裸参数，不要带 `?` 或 `&`。需要内容限制的图源必须写；
-   * 本身只提供安全内容的图源留空。
+   * 只写裸参数，不要带 `?` 或 `&`。
+   *
+   * **和 `sfwSafeEndpoint` 是二选一，必填**：两者都没有的图源在加载阶段被拒。
+   * 以前这条只有 code review 能保证；从 v0.2.0 起配置由用户写，必须由代码问出来。
    */
   sfwQuery?: string;
+  /**
+   * 声明"这个接口本身只提供安全内容"，用于**没有分级参数可配**的图源。
+   *
+   * 两种正当情形：站点本身没有分级概念（360、nekos.best）；
+   * 或者安全条件已经硬编码在地址模板里（safebooru 的 `rating:general`）。
+   *
+   * 写它等于向以后的维护者承诺"这个接口不会返回越界内容"，
+   * 依据要写进文档（`docs/SOURCES-CN.md` §11 是内置 5 个的逐条依据）。
+   *
+   * **有参数就必须用参数**：wallhaven 有 `purity`、lolicon 有 `r18`，
+   * 用一句声明代替就是撒谎。
+   */
+  sfwSafeEndpoint?: boolean;
   /**
    * 把图片地址从 `http://` 升级成 `https://`。
    * 界面跑在安全上下文里，WebView 不会加载 http 图片（表现为"列表有但图全裂"）。
@@ -139,7 +169,12 @@ export interface WallpaperSource {
   id: string;
   /** 界面上显示的名字。 */
   name: string;
-  /** 是否启用，默认 false —— 新图源由用户主动打开。 */
+  /**
+   * 是否出现在下拉框里。
+   *
+   * **默认 `true`**（v0.2.0 起）。写给"关掉但不删"的场景：`false` = 加载、但列表里不显示。
+   * 默认改过是因为反过来（默认 false）会给用户一个"文件放进去了却看不见、还不报错"的坑。
+   */
   enabled?: boolean;
   /** 站点主页，用于在界面上标注来源。 */
   homepage?: string;
@@ -152,12 +187,24 @@ export interface WallpaperSource {
   contentNote?: string;
   request: HttpRequestSpec;
   response: ResponseMapping;
+  /** 不配 = 没有内容安全声明 = 加载阶段被拒。见 `SourceFilter.sfwQuery`。 */
   filter?: SourceFilter;
   /** 不配 = 不支持搜索。 */
   search?: SearchSpec;
+  /**
+   * 来自用户配置目录，不是随程序打包的内置图源。
+   *
+   * 由加载器填写，**配置文件里写它没有意义**（会被覆盖）。
+   */
+  custom?: boolean;
 }
 
-/** `sources/builtin/*.json` 的顶层结构。 */
+/**
+ * 顶层结构。
+ *
+ * 以 `_` 或 `$` 开头的键会被忽略，可以当注释用（JSON 没有注释）：
+ * `"_comment": "说明"`。
+ */
 export interface SourcesFile {
   schemaVersion: 1;
   sources: WallpaperSource[];

@@ -504,3 +504,26 @@ lolicon 之前也 403 过。所以文档里能写的只有"**实测于某时某�
 | wallhaven | ❌ 超时 | JSON | 已接入，但需代理 |
 | 夜轻 / konachan / yande.re / danbooru / uapis / apihz / mukyu / xyttkx / yujn | 见 §1、§7、§9 | — | 未接入，各有实测原因 |
 
+## 11. 内容安全声明：五个内置图源各自的依据（2026-11-14）
+
+`v0.2.0` 起，`filter` 里 `sfwQuery` 和 `sfwSafeEndpoint` **必须有一个**，
+两者都空的图源在加载阶段就被拒（`sources/validate.rs`，有测试盯着）。
+这条规则对所有图源一样，内置的也不例外——所以下面这张表就是"我们凭什么说自己是安全的"。
+
+| 图源 | 靠什么保证 | 机制 |
+| --- | --- | --- |
+| **wallhaven** | `sfwQuery: "purity=100"` | 服务端参数，由代码追加。关掉它就得改配置，不可能"忘了写而没人发现" |
+| **lolicon** | `sfwQuery: "r18=0"` | 同上。**注意它仍然标了 `contentNote: 尺度较大`**：pixiv 的"一般向"里仍有暴露程度较高的图，参数能挡住 R-18，挡不住"擦边" |
+| **safebooru** | `sfwSafeEndpoint: true` + 模板里写死 `rating:general` | 它的搜索安全条件是**硬编码在地址模板**里的（§9.2）。两个模板各有一条 `rating:general`，`loader.rs::safebooru_keeps_its_rating_filter_in_the_template` 守着它们不被删 |
+| **360 壁纸** | `sfwSafeEndpoint: true` | **它没有分级参数**，只能固定「动漫卡通」分类（`cid=26`）。这是已知的弱项，§5 里早就写着；声明它安全，依据是"国产壁纸站的动漫分类不提供成人内容"，不是技术保证 |
+| **nekos.best** | `sfwSafeEndpoint: true` | 走的是 `/api/v2/neko`。该站的成人内容在独立的 `/api/v2/nsfw/...` 系列端点上，我们不碰那些端点 |
+
+三条必须承认的事：
+
+1. **`sfwSafeEndpoint` 是声明，不是机制。** 它只能保证"接图源的人被问过这个问题"，
+   保证不了接口明天不改行为。所以每一行的依据都写在这里，而不是只写一个 `true`。
+2. **`contentNote` 是提示，不是过滤。** 本项目没有任何机器判定的分级能力。
+3. **用户接自己的图源时，这张表管不到他。** 他必须自己做 §6 那个二选一；
+   我们能做的是拒绝"什么都不说"的配置。
+
+
